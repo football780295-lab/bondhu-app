@@ -55,50 +55,51 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
 
           <div className="p-2.5 flex items-center justify-between gap-2">
             {/* Profile Avatar & Info */}
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="relative shrink-0">
                 <img 
                   src={profile.avatar} 
                   alt={profile.name} 
-                  className="w-8 h-8 rounded-full object-cover border border-white/40 shadow-xs bg-slate-700"
+                  className="w-9 h-9 rounded-full object-cover border-2 border-white/50 shadow-xs bg-slate-700"
                 />
                 {profile.isOnline && (
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border border-slate-900 rounded-full"></span>
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-slate-900 rounded-full"></span>
                 )}
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-1">
-                  <h3 className="font-bold text-xs text-white truncate leading-tight">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="font-bold text-sm text-white truncate leading-tight">
                     {profile.name}
                   </h3>
-                  <span className="text-[10px] text-blue-400">✓</span>
+                  <span className="bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider">
+                    ✓
+                  </span>
                 </div>
-                <p className="text-[10px] text-slate-400 truncate">
-                  {profile.location}, Bangladesh
+                <p className="text-[11px] text-slate-300 font-medium truncate flex items-center gap-1.5 mt-0.5">
+                  <span>২৫ মিনিট আগে</span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 text-emerald-400 font-semibold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>অ্যাক্টিভ</span>
+                  </span>
+                  <span>•</span>
+                  <span>{profile.location}</span>
                 </p>
               </div>
             </div>
 
-            {/* Browser URL Display Bar */}
-            <div className="flex-1 min-w-0 bg-slate-950/80 border border-slate-700/80 rounded-xl px-2.5 py-1 flex items-center gap-1.5 shadow-inner">
-              <i className="fas fa-lock text-emerald-400 text-[9px] shrink-0"></i>
-              <span className="text-[11px] font-mono text-slate-300 truncate select-all">
-                {smartlinkUrl.replace('https://', '')}
-              </span>
-            </div>
-
-            {/* Actions: Refresh & Close (NO next/prev buttons) */}
-            <div className="flex items-center gap-1 shrink-0">
+            {/* Actions: Refresh & Close (NO URL address bar, 100% clean) */}
+            <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={handleRefresh}
-                className="w-7 h-7 rounded-full bg-slate-700/80 hover:bg-slate-600 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer text-xs"
-                title="ব্রাউজার রিফ্রেশ করুন"
+                className="w-8 h-8 rounded-full bg-slate-700/80 hover:bg-slate-600 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer text-xs"
+                title="রিফ্রেশ করুন"
               >
                 <i className="fas fa-sync-alt"></i>
               </button>
               <button
                 onClick={onClose}
-                className="w-7 h-7 rounded-full bg-slate-700 hover:bg-rose-600 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer text-xs shadow-xs"
+                className="w-8 h-8 rounded-full bg-slate-700 hover:bg-rose-600 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer text-xs shadow-xs"
                 title="স্টোরি বন্ধ করুন"
               >
                 <i className="fas fa-times"></i>
