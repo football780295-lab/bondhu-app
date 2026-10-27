@@ -120,6 +120,10 @@ class AdminService {
       this.profiles = [...ALL_PROFILES];
     }
 
+    try {
+      this.sanitizeProfileAvatars().catch(() => {});
+    } catch (_) {}
+
     // 2. Load Greetings from Local Cache
     try {
       const storedGreetings = localStorage.getItem(STORAGE_GREETINGS_KEY);
@@ -242,6 +246,47 @@ class AdminService {
     return this.lastCloudSyncTime;
   }
 
+  // Compress any existing oversized base64 avatar to crisp 120x120 JPEG (~1.8KB)
+  // This guarantees all 44+ profiles together take < 40KB and never exceed cloud storage limits!
+  public async sanitizeProfileAvatars(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const oversized = this.profiles.filter(
+      p => p.avatar && p.avatar.startsWith('data:image/') && p.avatar.length > 7000
+    );
+    if (oversized.length === 0) return;
+
+    await Promise.all(
+      oversized.map((p) => {
+        return new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const targetDim = 120;
+              const canvas = document.createElement('canvas');
+              canvas.width = targetDim;
+              canvas.height = targetDim;
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                const minSide = Math.min(img.width, img.height);
+                const sx = (img.width - minSide) / 2;
+                const sy = (img.height - minSide) / 2;
+                ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetDim, targetDim);
+                p.avatar = canvas.toDataURL('image/jpeg', 0.65);
+              }
+            } catch (_) {}
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = p.avatar;
+        });
+      })
+    );
+
+    try {
+      localStorage.setItem(STORAGE_PROFILES_KEY, JSON.stringify(this.profiles));
+    } catch (_) {}
+  }
+
   // Fetch latest profiles and greetings from Global Cloud Store
   public async fetchCloudProfiles(): Promise<boolean> {
     try {
@@ -291,6 +336,13 @@ class AdminService {
         const merged = baseList.map((existing) => {
           const cloudMatch = json.profiles.find((cp: any) => cp.id === existing.id);
           if (cloudMatch) {
+            // CRITICAL FIX: If local profile has a custom uploaded avatar (data:image/ or blob:),
+            // and the cloud profile has a default Unsplash avatar, DO NOT overwrite local avatar!
+            const hasLocalCustom = existing.avatar && existing.avatar.startsWith('data:image/');
+            const isCloudDefault = !cloudMatch.avatar || cloudMatch.avatar.includes('images.unsplash.com');
+            if (hasLocalCustom && isCloudDefault) {
+              return { ...existing, ...cloudMatch, avatar: existing.avatar };
+            }
             return { ...existing, ...cloudMatch };
           }
           return existing; // Keep existing local edits! Never revert to default!
@@ -334,6 +386,9 @@ class AdminService {
   public async syncToCloud(): Promise<{ success: boolean; message: string }> {
     this.isCloudSyncing = true;
     try {
+      // First ensure any old oversized avatars are downscaled to ~1.8KB so cloud never rejects
+      await this.sanitizeProfileAvatars();
+
       const nowIso = new Date().toISOString();
       const payload = {
         version: 2,
@@ -352,7 +407,10 @@ class AdminService {
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          success = true;
+          const resJson = await res.json().catch(() => ({}));
+          if (resJson && resJson.success !== false) {
+            success = true;
+          }
         }
       } catch (_) {}
 

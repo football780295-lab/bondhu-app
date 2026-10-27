@@ -60,7 +60,7 @@ const syncApiDevPlugin = () => ({
               const c1 = all.slice(0, half);
               const c2 = all.slice(half);
               const now = new Date().toISOString();
-              await Promise.all([
+              const [r1, r2] = await Promise.all([
                 fetch(BIN_URL_1, {
                   method: 'PUT',
                   headers: { 'Content-Type': 'text/plain' },
@@ -72,6 +72,11 @@ const syncApiDevPlugin = () => ({
                   body: JSON.stringify({ version: 2, updatedAt: now, profiles: c2, greetings: gr })
                 })
               ]);
+              if (!r1.ok || !r2.ok) {
+                res.statusCode = 500;
+                res.end(JSON.stringify({ success: false, message: `Cloud bin status: ${r1.status} / ${r2.status}` }));
+                return;
+              }
               res.statusCode = 200;
               res.end(JSON.stringify({ success: true, message: 'Saved successfully!' }));
             } catch (e: any) {

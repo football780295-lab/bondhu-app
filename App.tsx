@@ -595,7 +595,14 @@ const App: React.FC = () => {
   };
 
   if (isAdminPanelOpen) {
-    return <AdminPanel onClose={() => setIsAdminPanelOpen(false)} />;
+    return (
+      <AdminPanel 
+        onClose={() => {
+          setIsAdminPanelOpen(false);
+          setAllProfiles(adminService.getProfiles());
+        }} 
+      />
+    );
   }
 
   if (activeCall) {

@@ -114,7 +114,7 @@ export default async function handler(req: any, res: any) {
       };
 
       // Save both chunks in parallel to cloud storage bins
-      await Promise.all([
+      const [res1, res2] = await Promise.all([
         fetch(BIN_URL_1, {
           method: 'PUT',
           headers: { 'Content-Type': 'text/plain' },
@@ -126,6 +126,16 @@ export default async function handler(req: any, res: any) {
           body: JSON.stringify(payload2)
         })
       ]);
+
+      if (!res1.ok || !res2.ok) {
+        console.error('Bin save status:', res1.status, res2.status);
+        const errText1 = !res1.ok ? await res1.text().catch(() => '') : '';
+        const errText2 = !res2.ok ? await res2.text().catch(() => '') : '';
+        return res.status(500).json({
+          success: false,
+          message: `Cloud bin error: ${res1.status} (${errText1}) / ${res2.status} (${errText2})`
+        });
+      }
 
       return res.status(200).json({
         success: true,

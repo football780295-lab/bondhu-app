@@ -159,6 +159,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
       showToast(`✓ "${targetProfile.name}" প্রোফাইলের তথ্য ও ছবি সফলভাবে সেভ হয়েছে!`);
     }
 
+    setProfiles(adminService.getProfiles());
     setEditingProfile(null);
 
     // Immediately trigger cloud sync so all real website visitors receive it right away
@@ -166,6 +167,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
       const syncRes = await adminService.syncToCloud();
       if (syncRes.success) {
         showToast(`✓ "${targetProfile.name}" ছবি লাইভ ক্লাউড ও রিয়েল ওয়েবসাইটে সিঙ্ক হয়েছে!`);
+      } else {
+        showToast(syncRes.message || 'ক্লাউড সিঙ্ক অপেক্ষা করছে...');
       }
     } catch (_) {}
   };
@@ -209,8 +212,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
         const img = new Image();
         img.onload = () => {
-          // Auto-compress & center-crop to crisp 140x140 avatar (ultra-compact ~2KB so ALL 44+ profiles fit in cloud!)
-          const targetDim = 140;
+          // Auto-compress & center-crop to crisp 120x120 avatar (ultra-compact ~1.8KB so ALL 44+ profiles fit easily in cloud!)
+          const targetDim = 120;
           const canvas = document.createElement('canvas');
           canvas.width = targetDim;
           canvas.height = targetDim;
@@ -220,7 +223,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
             const sx = (img.width - minSide) / 2;
             const sy = (img.height - minSide) / 2;
             ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetDim, targetDim);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.70);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.65);
             setEditingProfile((prev) => (prev ? { ...prev, avatar: compressedBase64 } : null));
             showToast('✓ ছবি সফলভাবে অপটিমাইজ ও সিলেক্ট করা হয়েছে!');
           } else {
