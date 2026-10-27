@@ -92,7 +92,26 @@ class AdminService {
     try {
       const storedProfiles = localStorage.getItem(STORAGE_PROFILES_KEY);
       if (storedProfiles) {
-        this.profiles = JSON.parse(storedProfiles);
+        const parsed = JSON.parse(storedProfiles);
+        if (Array.isArray(parsed) && parsed.length >= ALL_PROFILES.length) {
+          this.profiles = parsed;
+        } else if (Array.isArray(parsed) && parsed.length > 0) {
+          // Merge so all 44 default profiles are always preserved
+          const merged = ALL_PROFILES.map((dp) => {
+            const found = parsed.find((p: any) => p.id === dp.id);
+            return found ? { ...dp, ...found } : dp;
+          });
+          parsed.forEach((cp: any) => {
+            if (!merged.some(p => p.id === cp.id)) {
+              merged.push(cp);
+            }
+          });
+          this.profiles = merged;
+          localStorage.setItem(STORAGE_PROFILES_KEY, JSON.stringify(this.profiles));
+        } else {
+          this.profiles = [...ALL_PROFILES];
+          localStorage.setItem(STORAGE_PROFILES_KEY, JSON.stringify(this.profiles));
+        }
       } else {
         this.profiles = [...ALL_PROFILES];
         localStorage.setItem(STORAGE_PROFILES_KEY, JSON.stringify(this.profiles));
@@ -267,7 +286,20 @@ class AdminService {
           }
         }
 
-        this.profiles = json.profiles;
+        // Merge cloud profiles with ALL_PROFILES so all 44 default profiles are always preserved!
+        const merged = ALL_PROFILES.map((defaultProfile) => {
+          const cloudMatch = json.profiles.find((cp: any) => cp.id === defaultProfile.id);
+          return cloudMatch ? { ...defaultProfile, ...cloudMatch } : defaultProfile;
+        });
+
+        // Also append any newly created custom profiles added by admin
+        json.profiles.forEach((cp: any) => {
+          if (!merged.some((p) => p.id === cp.id)) {
+            merged.push(cp);
+          }
+        });
+
+        this.profiles = merged;
         if (json.greetings && typeof json.greetings === 'object') {
           this.greetings = { ...this.greetings, ...json.greetings };
         }
