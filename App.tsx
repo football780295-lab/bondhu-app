@@ -9,6 +9,7 @@ import InstallAppModal from './components/InstallAppModal';
 import AdminPanel from './components/AdminPanel';
 import VideoAdModal, { AdModalReason } from './components/VideoAdModal';
 import DownloadRequiredModal from './components/DownloadRequiredModal';
+import StoryAdModal from './components/StoryAdModal';
 import { firebaseService, AuthUser } from './services/firebaseService';
 import { adminService } from './services/adminService';
 import { 
@@ -161,6 +162,7 @@ const App: React.FC = () => {
   const [adModalReason, setAdModalReason] = useState<AdModalReason>('topup');
   const [isDownloadRequiredOpen, setIsDownloadRequiredOpen] = useState(false);
   const [isAppInstalled, setIsAppInstalled] = useState<boolean>(() => creditService.checkIsAppInstalled());
+  const [selectedStoryProfile, setSelectedStoryProfile] = useState<Profile | null>(null);
 
   // Admin Panel State
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(() => adminService.isAdminLoggedIn());
@@ -1139,32 +1141,24 @@ const App: React.FC = () => {
         <div className="flex-1 min-h-0 overflow-y-auto bg-[#fafafa] scroll-container">
           {/* Horizontal Status Row */}
           <div className="flex gap-4 p-4 horizontal-scroll border-b border-gray-100 bg-white shrink-0">
-            {allProfiles.slice(0, 10).map(p => {
-              const hasUnread = !!unreadProfiles[p.id];
-              return (
-                <div 
-                  key={p.id} 
-                  onClick={() => openChat(p)}
-                  className="flex flex-col items-center gap-1 min-w-[64px] cursor-pointer"
-                >
-                   <div className={`w-14 h-14 rounded-full border-2 p-0.5 relative transition-all ${
-                     hasUnread ? 'border-rose-500 ring-2 ring-rose-400 ring-offset-1 scale-105' : 'border-blue-500'
-                   }`}>
-                      <SafeAvatar src={p.avatar} alt="status" className="w-full h-full rounded-full object-cover" />
-                      {hasUnread ? (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white">
-                          !
-                        </span>
-                      ) : p.isOnline ? (
-                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
-                      ) : null}
-                   </div>
-                   <span className={`text-[10px] truncate w-14 text-center ${hasUnread ? 'font-bold text-rose-600' : 'text-gray-600 font-medium'}`}>
-                    {p.name.split(' ')[0]}
-                   </span>
-                </div>
-              );
-            })}
+            {allProfiles.slice(0, 10).map(p => (
+              <div 
+                key={p.id} 
+                onClick={() => setSelectedStoryProfile(p)}
+                className="flex flex-col items-center gap-1 min-w-[64px] cursor-pointer group"
+                title={`${p.name}-এর স্টোরি দেখুন`}
+              >
+                 <div className="w-14 h-14 rounded-full border-2 border-blue-500 p-0.5 relative transition-all group-hover:scale-105 group-active:scale-95 shadow-xs bg-blue-50/50">
+                    <SafeAvatar src={p.avatar} alt="status" className="w-full h-full rounded-full object-cover" />
+                    {p.isOnline && (
+                      <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full shadow-2xs"></span>
+                    )}
+                 </div>
+                 <span className="text-[10px] truncate w-14 text-center text-gray-700 font-medium group-hover:text-blue-600 transition-colors">
+                  {p.name.split(' ')[0]}
+                 </span>
+              </div>
+            ))}
           </div>
 
           {/* Profile List Items */}
@@ -1361,6 +1355,17 @@ const App: React.FC = () => {
           setTimeout(() => {
             setIsAuthModalOpen(true);
           }, 800);
+        }}
+      />
+
+      {/* Untimed Ad Story Modal triggered from top story bar */}
+      <StoryAdModal
+        isOpen={!!selectedStoryProfile}
+        profile={selectedStoryProfile}
+        onClose={() => setSelectedStoryProfile(null)}
+        onStartChat={(p) => {
+          setSelectedStoryProfile(null);
+          openChat(p);
         }}
       />
     </div>
