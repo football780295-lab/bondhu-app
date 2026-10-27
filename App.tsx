@@ -1219,38 +1219,27 @@ const App: React.FC = () => {
                   <div 
                     key={profile.id}
                     onClick={() => openChat(profile)}
-                    className={`flex items-center p-4 cursor-pointer transition-colors ${
-                      isUnread 
-                        ? 'bg-blue-50/70 hover:bg-blue-100/70 border-l-4 border-blue-600' 
-                        : 'bg-white hover:bg-blue-50/40 active:bg-blue-100/50'
-                    }`}
+                    className="flex items-center p-4 cursor-pointer transition-colors bg-white hover:bg-gray-50 active:bg-gray-100"
                   >
                     <div className="relative shrink-0">
                       <SafeAvatar 
                         src={profile.avatar} 
                         alt={profile.name} 
-                        className={`w-14 h-14 rounded-full object-cover shadow-sm ${
-                          isUnread ? 'border-2 border-rose-500 ring-2 ring-rose-400/40' : 'border border-gray-200'
-                        }`} 
+                        className="w-14 h-14 rounded-full object-cover shadow-sm border border-gray-200" 
                       />
                       {profile.isOnline && (
                         <div className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-white"></div>
-                      )}
-                      {isUnread && (
-                        <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center border-2 border-white shadow-xs">
-                          1
-                        </span>
                       )}
                     </div>
 
                     <div className="ml-4 flex-1 min-w-0">
                       <div className="flex justify-between items-baseline gap-2">
                         <div className="flex items-center gap-1.5 truncate">
-                          <h3 className={`text-base leading-tight truncate ${isUnread ? 'font-extrabold text-gray-900' : 'font-bold text-gray-800'}`}>
+                          <h3 className={`text-base leading-tight truncate ${isUnread ? 'font-bold text-gray-900' : 'font-semibold text-gray-800'}`}>
                             {profile.name}
                           </h3>
                           {isUnread && (
-                            <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full uppercase tracking-wider shrink-0 animate-bounce">
+                            <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.2 rounded-full uppercase tracking-wider shrink-0">
                               নতুন মেসেজ
                             </span>
                           )}
@@ -1261,16 +1250,14 @@ const App: React.FC = () => {
                       </div>
 
                       <div className="flex justify-between items-center mt-1 gap-2">
-                        <p className={`text-sm truncate ${isUnread ? 'text-gray-900 font-semibold' : 'text-gray-500'}`}>
+                        <p className={`text-sm truncate ${isUnread ? 'text-gray-800 font-medium' : 'text-gray-500'}`}>
                           {lastMsg ? lastMsg.text : profile.status}
                         </p>
-                        {isUnread ? (
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0"></span>
-                        ) : profile.isOnline && !lastMsg ? (
+                        {profile.isOnline && !lastMsg && (
                           <span className="bg-blue-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">
                             Online
                           </span>
-                        ) : null}
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between mt-1">
