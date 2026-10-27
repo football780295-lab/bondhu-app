@@ -23,7 +23,7 @@ import { notificationService } from './services/notificationService';
 // Safe Image Component to prevent broken icons
 const SafeAvatar: React.FC<{ src: string; alt: string; className: string }> = ({ src, alt, className }) => {
   const [error, setError] = useState(false);
-  const fallback = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=400&h=400&auto=format&fit=crop";
+  const fallback = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&h=400&auto=format&fit=crop";
 
   useEffect(() => {
     setError(false);
@@ -36,8 +36,12 @@ const SafeAvatar: React.FC<{ src: string; alt: string; className: string }> = ({
       src={targetSrc} 
       alt={alt} 
       className={className} 
-      onError={() => setError(true)}
-      loading="lazy"
+      onError={() => {
+        // Only set error if not already on fallback
+        if (targetSrc !== fallback) {
+          setError(true);
+        }
+      }}
     />
   );
 };
@@ -231,6 +235,15 @@ const App: React.FC = () => {
       setAllProfiles(updated);
     });
 
+    const handleWindowProfilesUpdated = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setAllProfiles([...e.detail]);
+      } else {
+        setAllProfiles(adminService.getProfiles());
+      }
+    };
+    window.addEventListener('bondhu-profiles-updated', handleWindowProfilesUpdated);
+
     // Real-time Credit balance subscription
     const unsubCredits = creditService.subscribe((c) => {
       setUserCredits(c);
@@ -340,6 +353,7 @@ const App: React.FC = () => {
         unsubProfiles();
         unsubCredits();
         clearInterval(cloudSyncInterval);
+        window.removeEventListener('bondhu-profiles-updated', handleWindowProfilesUpdated);
         window.removeEventListener('appinstalled', handleAppInstalled);
         window.removeEventListener('bondhu-app-installed', handleCustomInstalled);
         window.removeEventListener('bondhu-admin-login', handleAdminLogin);

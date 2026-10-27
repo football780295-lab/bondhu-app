@@ -33,6 +33,7 @@ const STORAGE_ADMIN_SESSION_KEY = 'BONDHU_ADMIN_SESSION_ACTIVE';
 const STORAGE_LOCAL_UPDATED_AT_KEY = 'BONDHU_LOCAL_PROFILES_UPDATED_AT_V2';
 
 // Global Cloud Sync Endpoint for live real website updates
+export const API_SYNC_ENDPOINT = '/api/sync';
 export const GLOBAL_CLOUD_STORAGE_URL = 'https://extendsclass.com/api/json-storage/bin/ceaeeff';
 
 // Initial realistic signups seed if empty
@@ -70,7 +71,17 @@ class AdminService {
     if (typeof window !== 'undefined') {
       setTimeout(() => {
         this.fetchCloudProfiles().catch(() => {});
-      }, 500);
+      }, 300);
+
+      // Auto-refresh profiles whenever visitor returns to tab or reconnects
+      window.addEventListener('focus', () => {
+        this.fetchCloudProfiles().catch(() => {});
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.fetchCloudProfiles().catch(() => {});
+        }
+      });
     }
   }
 
@@ -215,23 +226,42 @@ class AdminService {
   // Fetch latest profiles and greetings from Global Cloud Store
   public async fetchCloudProfiles(): Promise<boolean> {
     try {
-      const res = await fetch(`${GLOBAL_CLOUD_STORAGE_URL}?t=${Date.now()}`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      });
-      if (!res.ok) return false;
-      const json = await res.json();
+      let json: any = null;
+
+      // 1. Try our same-origin /api/sync endpoint first (Zero CORS issues)
+      try {
+        const apiRes = await fetch(`${API_SYNC_ENDPOINT}?t=${Date.now()}`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        });
+        if (apiRes.ok) {
+          json = await apiRes.json();
+        }
+      } catch (_) {}
+
+      // 2. Fallback to direct cloud storage bin if API was not reachable
+      if (!json || !Array.isArray(json.profiles) || json.profiles.length === 0) {
+        try {
+          const directRes = await fetch(`${GLOBAL_CLOUD_STORAGE_URL}?t=${Date.now()}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+          });
+          if (directRes.ok) {
+            json = await directRes.json();
+          }
+        } catch (_) {}
+      }
+
       if (json && Array.isArray(json.profiles) && json.profiles.length > 0) {
         // Timestamp conflict check:
-        // If this device has recent local edits that haven't been pushed or were saved within 10 minutes,
-        // do NOT overwrite local changes with stale cloud profiles! Instead push local to cloud!
+        // If this device has recent local edits saved within 10 minutes,
+        // do NOT overwrite local changes with stale cloud profiles!
         if (typeof window !== 'undefined') {
           const localUpdateStr = localStorage.getItem(STORAGE_LOCAL_UPDATED_AT_KEY);
           const localTime = localUpdateStr ? parseInt(localUpdateStr, 10) : 0;
           const cloudTime = json.updatedAt ? new Date(json.updatedAt).getTime() : 0;
 
           if (localTime > cloudTime && (Date.now() - localTime) < 600000) {
-            console.log('Local profiles are newer than cloud, pushing local to cloud...');
             this.syncToCloud().catch(() => {});
             return true;
           }
@@ -244,6 +274,7 @@ class AdminService {
         if (json.updatedAt) {
           this.lastCloudSyncTime = json.updatedAt;
         }
+
         // Save to local cache safely and notify all UI subscribers without re-uploading
         this.notifyProfiles(true);
         return true;
@@ -267,23 +298,43 @@ class AdminService {
         greetings: this.greetings
       };
 
-      const res = await fetch(GLOBAL_CLOUD_STORAGE_URL, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'text/plain'
-        },
-        body: JSON.stringify(payload)
-      });
+      let success = false;
+
+      // 1. Send to /api/sync endpoint (works seamlessly on Vercel & localhost)
+      try {
+        const res = await fetch(API_SYNC_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          success = true;
+        }
+      } catch (_) {}
+
+      // 2. Fallback to direct cloud storage PUT if needed
+      if (!success) {
+        try {
+          const directRes = await fetch(GLOBAL_CLOUD_STORAGE_URL, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(payload)
+          });
+          if (directRes.ok) {
+            success = true;
+          }
+        } catch (_) {}
+      }
 
       this.isCloudSyncing = false;
-      if (res.ok) {
+      if (success) {
         this.lastCloudSyncTime = nowIso;
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_LOCAL_UPDATED_AT_KEY, new Date(nowIso).getTime().toString());
         }
-        return { success: true, message: 'সফলভাবে লাইভ ক্লাউড ও রিয়েল ওয়েবসাইটে পাবলিশ হয়েছে!' };
+        return { success: true, message: 'সফলভাবে লাইভ ক্লাউড ও রিয়েল ওয়েবসাইটে সেভ হয়েছে!' };
       }
-      return { success: false, message: `ক্লাউড সিঙ্ক সমস্যা (Code: ${res.status})` };
+      return { success: false, message: 'ক্লাউড সিঙ্ক সম্পন্ন হতে পারেনি, তবে লোকাল মেমরিতে সেভ আছে।' };
     } catch (err: any) {
       this.isCloudSyncing = false;
       return { success: false, message: `ক্লাউড সিঙ্ক এরর: ${err?.message || 'Network issue'}` };
@@ -311,6 +362,11 @@ class AdminService {
       } catch (err) {
         console.warn('LocalStorage save quota exceeded, profiles kept in memory:', err);
       }
+
+      // Dispatch global window event for instantaneous UI updates across all components
+      try {
+        window.dispatchEvent(new CustomEvent('bondhu-profiles-updated', { detail: this.profiles }));
+      } catch (_) {}
     }
     this.profileListeners.forEach(cb => cb([...this.profiles]));
 
