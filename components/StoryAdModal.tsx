@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Profile } from '../types';
 import { creditService } from '../services/creditService';
 
@@ -11,23 +11,6 @@ interface StoryAdModalProps {
   onStartChat?: (profile: Profile, initialMessage?: string) => void;
 }
 
-// Natural Bengali link sticker captions for each companion to feel 100% genuine & personal
-const getCompanionStoryLinkText = (profileId: string): string => {
-  const map: Record<string, string> = {
-    nila: "আমার নতুন এক্সক্লুসিভ ছবি দেখুন 💋",
-    ayesha: "আমার সিক্রেট ভিডিও ও মুহূর্ত দেখুন ✨",
-    sumaiya: "আমার পার্সোনাল অ্যালবাম দেখুন 💖",
-    mim: "আমার সাথে সরাসরি কানেক্ট হন 🌸",
-    priya: "আমার স্পেশাল মুহূর্তগুলো দেখুন 💕",
-    riya: "আমার নতুন রিলস ও ভিডিও 🎵",
-    tania: "আমার পার্সোনাল প্রোফাইল দেখুন 📸",
-    sadiya: "আমার নতুন ছবি দেখতে এখানে চাপুন ❤️",
-    nusrat: "আমার ড্রিম আর্ট ও স্পেশাল ছবি 🎨",
-    zara: "আমার আরও সুন্দর মুহূর্তগুলো দেখুন ✨",
-  };
-  return map[profileId] || "আমার নতুন ছবি ও মুহূর্ত দেখুন 💋";
-};
-
 const StoryAdModal: React.FC<StoryAdModalProps> = ({
   isOpen,
   profile,
@@ -36,20 +19,11 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
   onSelectProfile,
   onStartChat
 }) => {
-  const [replyText, setReplyText] = useState('');
-  const [isPaused, setIsPaused] = useState(false);
-  const [reactionEffect, setReactionEffect] = useState<string | null>(null);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
   const smartlinkUrl = creditService.getSmartlink();
-
-  // Reset state whenever profile changes
-  useEffect(() => {
-    setReplyText('');
-    setReactionEffect(null);
-  }, [profile?.id]);
 
   if (!isOpen || !profile) return null;
 
-  // Find current index among available story profiles
   const currentIndex = allProfiles.findIndex(p => p.id === profile.id);
 
   const handleNextStory = (e?: React.MouseEvent) => {
@@ -57,6 +31,7 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
     if (allProfiles.length > 0 && currentIndex !== -1) {
       const nextIndex = (currentIndex + 1) % allProfiles.length;
       if (onSelectProfile) {
+        setIframeLoaded(false);
         onSelectProfile(allProfiles[nextIndex]);
       }
     }
@@ -67,36 +42,16 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
     if (allProfiles.length > 0 && currentIndex !== -1) {
       const prevIndex = (currentIndex - 1 + allProfiles.length) % allProfiles.length;
       if (onSelectProfile) {
+        setIframeLoaded(false);
         onSelectProfile(allProfiles[prevIndex]);
       }
     }
   };
 
-  const handleSendReply = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const text = replyText.trim();
-    if (!text) return;
-    if (onStartChat) {
-      onStartChat(profile, text);
-    }
+  const handleStartChat = () => {
     onClose();
-  };
-
-  const handleSendReaction = (emoji: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setReactionEffect(emoji);
-    setTimeout(() => {
-      if (onStartChat) {
-        onStartChat(profile, emoji);
-      }
-      onClose();
-    }, 600);
-  };
-
-  const handleOpenLinkSticker = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (typeof window !== 'undefined') {
-      window.open(smartlinkUrl, '_blank', 'noopener,noreferrer');
+    if (onStartChat) {
+      onStartChat(profile);
     }
   };
 
@@ -107,38 +62,11 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
     >
       {/* Phone Canvas Container */}
       <div 
-        className="w-full h-full sm:h-[95vh] sm:max-w-md bg-black sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col relative border-0 sm:border sm:border-slate-800"
+        className="w-full h-full sm:h-[95vh] sm:max-w-md bg-slate-900 sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col relative border-0 sm:border sm:border-slate-800"
         onClick={(e) => e.stopPropagation()}
-        onMouseDown={() => setIsPaused(true)}
-        onMouseUp={() => setIsPaused(false)}
-        onTouchStart={() => setIsPaused(true)}
-        onTouchEnd={() => setIsPaused(false)}
       >
-        {/* ================= 1. FULL-BLEED VERTICAL PERSONAL STORY IMAGE ================= */}
-        <div className="absolute inset-0 z-0 overflow-hidden bg-slate-950">
-          <img 
-            src={profile.avatar} 
-            alt={profile.name} 
-            className={`w-full h-full object-cover transition-transform duration-700 ${isPaused ? 'scale-100' : 'scale-105'}`}
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&h=400&auto=format&fit=crop";
-            }}
-          />
-          {/* Top Dark Gradient for Header Readability */}
-          <div className="absolute top-0 left-0 right-0 h-36 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none"></div>
-          {/* Bottom Dark Gradient for Engagement Bar Readability */}
-          <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-black/90 via-black/50 to-transparent pointer-events-none"></div>
-        </div>
-
-        {/* Floating Heart / Reaction Burst Animation */}
-        {reactionEffect && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none animate-bounce">
-            <span className="text-7xl drop-shadow-2xl">{reactionEffect}</span>
-          </div>
-        )}
-
-        {/* ================= 2. TOP STORY HEADER (REAL PERSONAL STORY STYLE) ================= */}
-        <div className="relative z-20 p-3 pt-3.5 space-y-2 shrink-0">
+        {/* ================= 1. TOP STORY HEADER (REAL PERSONAL STORY STYLE) ================= */}
+        <div className="absolute top-0 left-0 right-0 z-30 p-3 pt-3.5 space-y-2 bg-gradient-to-b from-black/85 via-black/45 to-transparent pointer-events-auto">
           {/* Segmented Story Progress Bars */}
           <div className="flex items-center gap-1.5 w-full">
             {(allProfiles.length > 0 ? allProfiles : [profile]).map((p, idx) => {
@@ -160,7 +88,7 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
             })}
           </div>
 
-          {/* User Info & Actions Bar (100% Personal, No Ad Branding) */}
+          {/* User Info & Actions Bar (100% Personal, Looks like her real story) */}
           <div className="flex items-center justify-between gap-2 pt-1">
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="relative shrink-0">
@@ -183,7 +111,7 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
                     ✓
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-[11px] text-white/80 font-medium drop-shadow-xs">
+                <div className="flex items-center gap-1.5 text-[11px] text-white/90 font-medium drop-shadow-xs">
                   <span>২৫ মিনিট আগে</span>
                   <span>•</span>
                   <span className="flex items-center gap-1 text-emerald-400 font-semibold">
@@ -196,100 +124,76 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
               </div>
             </div>
 
-            {/* Close Button */}
-            <button
-              onClick={onClose}
-              className="w-9 h-9 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer backdrop-blur-md border border-white/20 shrink-0 text-sm shadow-md"
-              title="স্টোরি বন্ধ করুন"
-            >
-              <i className="fas fa-times"></i>
-            </button>
-          </div>
-        </div>
-
-        {/* ================= 3. TAP NAVIGATION ZONES (LEFT / RIGHT) ================= */}
-        <div className="flex-1 relative z-10 flex">
-          {/* Left Tap Zone: Previous Story */}
-          <div 
-            className="w-1/3 h-full cursor-pointer"
-            onClick={handlePrevStory}
-            title="আগের স্টোরি"
-          ></div>
-
-          {/* Middle/Content Zone */}
-          <div className="w-1/3 h-full pointer-events-none"></div>
-
-          {/* Right Tap Zone: Next Story */}
-          <div 
-            className="w-1/3 h-full cursor-pointer"
-            onClick={handleNextStory}
-            title="পরের স্টোরি"
-          ></div>
-        </div>
-
-        {/* ================= 4. PERSONAL STORY CAPTION & NATURAL LINK STICKER ================= */}
-        <div className="relative z-20 px-4 pb-3 space-y-2.5 pointer-events-auto">
-          {/* Personal Status Caption from Companion */}
-          <div className="bg-black/45 backdrop-blur-md border border-white/15 text-white px-4 py-2 rounded-2xl shadow-lg inline-block max-w-[90%]">
-            <p className="text-xs font-semibold leading-relaxed">
-              "{profile.status || 'আজকের দিনটা দারুণ লাগছে... ❤️'}"
-            </p>
-          </div>
-
-          {/* Natural Instagram Story Link Sticker (Looks 100% like a personal link sticker) */}
-          <div 
-            onClick={handleOpenLinkSticker}
-            className="inline-flex items-center gap-2.5 bg-white/95 hover:bg-white active:scale-95 text-slate-900 px-4 py-2.5 rounded-2xl shadow-xl cursor-pointer transition-all border border-white/40 max-w-[95%] group backdrop-blur-md"
-            title={getCompanionStoryLinkText(profile.id)}
-          >
-            <div className="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center text-xs shrink-0 shadow-2xs group-hover:rotate-45 transition-transform">
-              <i className="fas fa-link"></i>
-            </div>
-            <span className="text-xs font-extrabold truncate text-slate-800">
-              {getCompanionStoryLinkText(profile.id)}
-            </span>
-            <i className="fas fa-arrow-up-right-from-square text-[10px] text-slate-400 group-hover:text-blue-600 transition-colors shrink-0"></i>
-          </div>
-
-          {/* ================= 5. STORY ENGAGEMENT (REPLY & REACTIONS) ================= */}
-          <div className="space-y-2 pt-1">
-            {/* Quick Reaction Emoji Row */}
-            <div className="flex items-center justify-around bg-black/40 backdrop-blur-md rounded-full py-1.5 px-2 border border-white/10">
-              {['❤️', '😍', '🔥', '🥰', '😘'].map((emoji) => (
-                <button
-                  key={emoji}
-                  onClick={(e) => handleSendReaction(emoji, e)}
-                  className="text-xl hover:scale-130 active:scale-90 transition-transform cursor-pointer p-1"
-                  title={`${profile.name}-কে ${emoji} রিয়েক্ট পাঠান`}
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-
-            {/* Quick Message Input Form */}
-            <form onSubmit={handleSendReply} className="flex items-center gap-2">
-              <input 
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder={`${profile.name.split(' ')[0]}-কে মেসেজ লিখুন...`}
-                className="flex-1 bg-black/50 hover:bg-black/60 focus:bg-black/75 text-white placeholder-white/60 text-xs px-4 py-3 rounded-full border border-white/25 focus:outline-none focus:border-blue-400 backdrop-blur-md transition-all shadow-inner"
-              />
+            {/* Actions: Prev / Next / Close */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {allProfiles.length > 1 && (
+                <>
+                  <button
+                    onClick={handlePrevStory}
+                    className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center text-xs backdrop-blur-md border border-white/20 transition-all cursor-pointer shadow-xs active:scale-95"
+                    title="আগের স্টোরি"
+                  >
+                    <i className="fas fa-chevron-left"></i>
+                  </button>
+                  <button
+                    onClick={handleNextStory}
+                    className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center text-xs backdrop-blur-md border border-white/20 transition-all cursor-pointer shadow-xs active:scale-95"
+                    title="পরের স্টোরি"
+                  >
+                    <i className="fas fa-chevron-right"></i>
+                  </button>
+                </>
+              )}
               <button
-                type="submit"
-                disabled={!replyText.trim()}
-                className={`w-10 h-10 rounded-full flex items-center justify-center text-sm shadow-md transition-all cursor-pointer shrink-0 ${
-                  replyText.trim() 
-                    ? 'bg-blue-600 text-white hover:bg-blue-500 active:scale-95' 
-                    : 'bg-white/20 text-white/40 cursor-not-allowed'
-                }`}
-                title="মেসেজ পাঠান"
+                onClick={onClose}
+                className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer backdrop-blur-md border border-white/20 text-sm shadow-md"
+                title="স্টোরি বন্ধ করুন"
               >
-                <i className="fas fa-paper-plane"></i>
+                <i className="fas fa-times"></i>
               </button>
-            </form>
+            </div>
           </div>
+        </div>
+
+        {/* ================= 2. THE STORY CONTENT: THE LIVE ADS ================= */}
+        <div className="flex-1 w-full h-full relative overflow-hidden bg-slate-950 flex flex-col pt-18 pb-16">
+          {/* Subtle Loading Spinner behind iframe */}
+          {!iframeLoaded && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950 p-6 text-center space-y-3">
+              <div className="w-9 h-9 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <p className="text-xs font-semibold text-slate-300">স্টোরি লোড হচ্ছে...</p>
+            </div>
+          )}
+
+          {/* Embedded Live Ad Content filling the entire story */}
+          <iframe 
+            key={profile.id}
+            src={smartlinkUrl}
+            onLoad={() => setIframeLoaded(true)}
+            className="w-full h-full border-0 bg-white"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+            title={`${profile.name} Story Ad`}
+          />
+        </div>
+
+        {/* ================= 3. BOTTOM FLOATING ENGAGEMENT BAR ================= */}
+        <div className="absolute bottom-0 left-0 right-0 z-30 p-3 pb-3.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={handleStartChat}
+            className="flex-1 bg-white/20 hover:bg-white/30 active:scale-98 text-white font-semibold text-xs py-2.5 px-4 rounded-full backdrop-blur-md border border-white/25 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+          >
+            <i className="fas fa-comment-dots text-blue-300"></i>
+            <span>{profile.name.split(' ')[0]}-কে মেসেজ পাঠান...</span>
+          </button>
+
+          <button
+            onClick={onClose}
+            className="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center text-xs backdrop-blur-md border border-white/20 shrink-0 cursor-pointer"
+            title="বন্ধ করুন"
+          >
+            <i className="fas fa-times"></i>
+          </button>
         </div>
       </div>
     </div>
