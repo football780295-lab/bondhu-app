@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Profile } from '../types';
 import { creditService } from '../services/creditService';
 
@@ -16,12 +16,19 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
   onStartChat
 }) => {
   const [iframeKey, setIframeKey] = useState<number>(0);
+  const [hasTapped, setHasTapped] = useState<boolean>(false);
   const smartlinkUrl = creditService.getSmartlink();
+
+  // Reset tap hint whenever profile or refresh changes
+  useEffect(() => {
+    setHasTapped(false);
+  }, [profile?.id, iframeKey]);
 
   if (!isOpen || !profile) return null;
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setHasTapped(false);
     setIframeKey((prev) => prev + 1);
     const frame = document.getElementById('story-browser-frame') as HTMLIFrameElement;
     if (frame) {
@@ -88,7 +95,7 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
               </div>
             </div>
 
-            {/* Actions: Refresh & Close (NO URL address bar, 100% clean) */}
+            {/* Actions: Refresh & Close (NO URL text, 100% clean) */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
                 onClick={handleRefresh}
@@ -108,15 +115,40 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
           </div>
         </div>
 
-        {/* ================= 2. THE IN-APP BROWSER (NO BLACK SCREEN, OPENS THE LINK DIRECTLY) ================= */}
-        <div className="flex-1 w-full bg-white relative overflow-hidden flex flex-col min-h-0">
+        {/* ================= 2. THE IN-APP BROWSER (NO PLAIN WHITE SCREEN) ================= */}
+        <div 
+          className="flex-1 w-full bg-slate-950 relative overflow-hidden flex flex-col min-h-0"
+          onMouseDown={() => setHasTapped(true)}
+          onTouchStart={() => setHasTapped(true)}
+        >
+          {/* Active Tap-To-Load Hint Overlay (Passes clicks directly through to the iframe) */}
+          {!hasTapped && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-xs p-6 text-center space-y-3 pointer-events-none transition-opacity duration-300">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-500 via-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl shadow-xl shadow-blue-500/25 animate-bounce">
+                <i className="fas fa-play ml-0.5"></i>
+              </div>
+              <div className="space-y-1 max-w-xs">
+                <p className="text-sm font-bold text-white">
+                  বিজ্ঞাপনটি দেখতে স্ক্রিনে ট্যাপ করুন
+                </p>
+                <p className="text-xs text-slate-300">
+                  যেকোনো জায়গায় চাপ দিলেই বিজ্ঞাপন সরাসরি চালু হবে
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 bg-blue-500/20 text-blue-300 border border-blue-500/30 px-3 py-1 rounded-full text-[11px] font-bold">
+                <i className="fas fa-hand-pointer text-[10px] animate-pulse"></i>
+                <span>স্ক্রিনে চাপুন</span>
+              </span>
+            </div>
+          )}
+
+          {/* Embedded In-App Browser Frame (Standard Permissions, No Restrictive Sandbox) */}
           <iframe
             id="story-browser-frame"
             key={`${profile.id}-${iframeKey}`}
             src={smartlinkUrl}
             className="w-full h-full border-0 bg-white"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"
             title={`${profile.name} Story Browser`}
           />
         </div>
