@@ -286,10 +286,22 @@ class AdminService {
           }
         }
 
-        // Merge cloud profiles with ALL_PROFILES so all 44 default profiles are always preserved!
-        const merged = ALL_PROFILES.map((defaultProfile) => {
-          const cloudMatch = json.profiles.find((cp: any) => cp.id === defaultProfile.id);
-          return cloudMatch ? { ...defaultProfile, ...cloudMatch } : defaultProfile;
+        // Preserve current local edits on this device, and merge cloud updates on top!
+        const baseList = this.profiles.length > 0 ? this.profiles : ALL_PROFILES;
+        const merged = baseList.map((existing) => {
+          const cloudMatch = json.profiles.find((cp: any) => cp.id === existing.id);
+          if (cloudMatch) {
+            return { ...existing, ...cloudMatch };
+          }
+          return existing; // Keep existing local edits! Never revert to default!
+        });
+
+        // Ensure all 44 default profiles are always present
+        ALL_PROFILES.forEach((dp) => {
+          if (!merged.some((p) => p.id === dp.id)) {
+            const cloudMatch = json.profiles.find((cp: any) => cp.id === dp.id);
+            merged.push(cloudMatch ? { ...dp, ...cloudMatch } : dp);
+          }
         });
 
         // Also append any newly created custom profiles added by admin
