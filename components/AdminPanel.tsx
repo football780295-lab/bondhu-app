@@ -209,29 +209,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
         const img = new Image();
         img.onload = () => {
-          // Auto-compress & scale to square avatar (max 260x260) for fast loading across all visitors
-          const maxDim = 260;
-          let width = img.width;
-          let height = img.height;
-          if (width > height) {
-            if (width > maxDim) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            }
-          } else {
-            if (height > maxDim) {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-
+          // Auto-compress & center-crop to crisp 140x140 avatar (ultra-compact ~2KB so ALL 44+ profiles fit in cloud!)
+          const targetDim = 140;
           const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = targetDim;
+          canvas.height = targetDim;
           const ctx = canvas.getContext('2d');
           if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.78);
+            const minSide = Math.min(img.width, img.height);
+            const sx = (img.width - minSide) / 2;
+            const sy = (img.height - minSide) / 2;
+            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, targetDim, targetDim);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.70);
             setEditingProfile((prev) => (prev ? { ...prev, avatar: compressedBase64 } : null));
             showToast('✓ ছবি সফলভাবে অপটিমাইজ ও সিলেক্ট করা হয়েছে!');
           } else {

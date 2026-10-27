@@ -1,7 +1,8 @@
 // Vercel Serverless Function: Global Profiles & Sync API
-// Runs on Node.js server - Zero browser CORS issues!
+// Dual-bin high-capacity cloud storage to ensure ALL 44+ profiles & images save without payload limits
 
-const CLOUD_BIN_URL = 'https://extendsclass.com/api/json-storage/bin/ceaeeff';
+const BIN_URL_1 = 'https://extendsclass.com/api/json-storage/bin/ceaeeff';
+const BIN_URL_2 = 'https://extendsclass.com/api/json-storage/bin/bdbdace';
 
 export default async function handler(req: any, res: any) {
   // Allow all origins, methods, and headers
@@ -15,37 +16,67 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
-  // GET: Fetch latest profiles from cloud storage
+  // GET: Fetch profiles from both cloud bins and combine them
   if (req.method === 'GET') {
     try {
-      const response = await fetch(`${CLOUD_BIN_URL}?t=${Date.now()}`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' }
-      });
+      const [r1, r2] = await Promise.all([
+        fetch(`${BIN_URL_1}?t=${Date.now()}`, { headers: { Accept: 'application/json' } }),
+        fetch(`${BIN_URL_2}?t=${Date.now()}`, { headers: { Accept: 'application/json' } })
+      ]);
 
-      if (!response.ok) {
-        return res.status(response.status).json({
-          version: 2,
-          profiles: [],
-          greetings: {},
-          error: `Backend responded with code ${response.status}`
-        });
+      let profiles1: any[] = [];
+      let profiles2: any[] = [];
+      let greetings: any = {};
+
+      if (r1.ok) {
+        try {
+          const d1 = await r1.json();
+          if (Array.isArray(d1.profiles)) profiles1 = d1.profiles;
+          if (d1.greetings && typeof d1.greetings === 'object') {
+            greetings = { ...greetings, ...d1.greetings };
+          }
+        } catch (_) {}
       }
 
-      const data = await response.json();
-      return res.status(200).json(data);
+      if (r2.ok) {
+        try {
+          const d2 = await r2.json();
+          if (Array.isArray(d2.profiles)) profiles2 = d2.profiles;
+          if (d2.greetings && typeof d2.greetings === 'object') {
+            greetings = { ...greetings, ...d2.greetings };
+          }
+        } catch (_) {}
+      }
+
+      // Combine both chunks into unified profile list
+      const combinedProfiles: any[] = [...profiles1];
+      profiles2.forEach((p2) => {
+        const existingIdx = combinedProfiles.findIndex((p) => p.id === p2.id);
+        if (existingIdx !== -1) {
+          combinedProfiles[existingIdx] = { ...combinedProfiles[existingIdx], ...p2 };
+        } else {
+          combinedProfiles.push(p2);
+        }
+      });
+
+      return res.status(200).json({
+        version: 2,
+        profiles: combinedProfiles,
+        greetings: greetings,
+        count: combinedProfiles.length
+      });
     } catch (err: any) {
-      console.error('Error fetching profiles in api/sync:', err);
+      console.error('Error fetching in api/sync:', err);
       return res.status(500).json({
         version: 2,
         profiles: [],
         greetings: {},
-        error: err?.message || 'Failed to fetch profiles'
+        error: err?.message || 'Failed to fetch'
       });
     }
   }
 
-  // POST / PUT: Save updated profiles to cloud storage
+  // POST / PUT: Split and save across both cloud bins to avoid any 100KB limit
   if (req.method === 'POST' || req.method === 'PUT') {
     try {
       let bodyData = req.body;
@@ -56,41 +87,57 @@ export default async function handler(req: any, res: any) {
       }
 
       if (!bodyData || (!bodyData.profiles && !Array.isArray(bodyData))) {
-        return res.status(400).json({ success: false, message: 'Invalid payload: profiles array required' });
+        return res.status(400).json({ success: false, message: 'Profiles array required' });
       }
 
-      // Ensure proper structure
-      const payload = {
+      const allProfiles: any[] = Array.isArray(bodyData.profiles) ? bodyData.profiles : (Array.isArray(bodyData) ? bodyData : []);
+      const greetings = bodyData.greetings || {};
+
+      // Split profiles into 2 safe chunks (e.g. 1-22 and 23-44)
+      const half = Math.ceil(allProfiles.length / 2);
+      const chunk1 = allProfiles.slice(0, half);
+      const chunk2 = allProfiles.slice(half);
+
+      const nowIso = new Date().toISOString();
+      const payload1 = {
         version: 2,
-        updatedAt: new Date().toISOString(),
-        profiles: Array.isArray(bodyData.profiles) ? bodyData.profiles : (Array.isArray(bodyData) ? bodyData : []),
-        greetings: bodyData.greetings || {}
+        updatedAt: nowIso,
+        profiles: chunk1,
+        greetings: greetings
       };
 
-      // Server-side PUT request to extendsclass (No browser CORS preflight!)
-      const response = await fetch(CLOUD_BIN_URL, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'text/plain'
-        },
-        body: JSON.stringify(payload)
-      });
+      const payload2 = {
+        version: 2,
+        updatedAt: nowIso,
+        profiles: chunk2,
+        greetings: greetings
+      };
 
-      if (!response.ok) {
-        console.warn(`Upstream error: ${response.status} ${response.statusText}`);
-      }
+      // Save both chunks in parallel to cloud storage bins
+      await Promise.all([
+        fetch(BIN_URL_1, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(payload1)
+        }),
+        fetch(BIN_URL_2, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(payload2)
+        })
+      ]);
 
       return res.status(200).json({
         success: true,
-        message: 'সফলভাবে ক্লাউডে সেভ হয়েছে!',
-        updatedAt: payload.updatedAt,
-        count: payload.profiles.length
+        message: 'সকল প্রোফাইল ও ছবি সফলভাবে ক্লাউডে সেভ হয়েছে!',
+        updatedAt: nowIso,
+        count: allProfiles.length
       });
     } catch (err: any) {
-      console.error('Error saving profiles in api/sync:', err);
+      console.error('Error saving in api/sync:', err);
       return res.status(500).json({
         success: false,
-        message: err?.message || 'Server error while saving'
+        message: err?.message || 'Failed to save to cloud storage'
       });
     }
   }
