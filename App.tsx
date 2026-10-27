@@ -475,16 +475,34 @@ const App: React.FC = () => {
     return [...filteredProfiles].sort((a, b) => a.name.localeCompare(b.name));
   }, [filteredProfiles]);
 
-  // Sorted profiles for Chats tab so profiles with unread messages or active chats appear at the top
+  const getLastMessageTime = (profileId: string): number => {
+    const msgs = chatHistory[profileId];
+    if (!msgs || msgs.length === 0) return 0;
+    const last = msgs[msgs.length - 1];
+    if (!last || !last.timestamp) return 0;
+    try {
+      const t = new Date(last.timestamp).getTime();
+      return isNaN(t) ? 0 : t;
+    } catch (_) {
+      return 0;
+    }
+  };
+
+  // Sorted profiles for Chats tab so profiles with recent activity always appear at the top
   const chatSortedProfiles = useMemo(() => {
     return [...filteredProfiles].sort((a, b) => {
+      const aTime = getLastMessageTime(a.id);
+      const bTime = getLastMessageTime(b.id);
+
+      // 1. Most recent message strictly on top (latest conversation first)
+      if (aTime !== bTime) {
+        return bTime - aTime;
+      }
+
+      // 2. Unread messages on top for tie-breaks
       const aUnread = unreadProfiles[a.id] ? 1 : 0;
       const bUnread = unreadProfiles[b.id] ? 1 : 0;
       if (aUnread !== bUnread) return bUnread - aUnread;
-
-      const aHasMsg = (chatHistory[a.id]?.length || 0) > 0 ? 1 : 0;
-      const bHasMsg = (chatHistory[b.id]?.length || 0) > 0 ? 1 : 0;
-      if (aHasMsg !== bHasMsg) return bHasMsg - aHasMsg;
 
       return 0;
     });
@@ -492,6 +510,14 @@ const App: React.FC = () => {
 
   const openChat = (profile: Profile) => {
     setSelectedProfile(profile);
+    setActiveTab('chats'); // Ensure the user lands on the chats feed
+
+    // Move this profile to the top of allProfiles immediately
+    setAllProfiles((prev) => {
+      const target = prev.find((p) => p.id === profile.id);
+      if (!target) return prev;
+      return [target, ...prev.filter((p) => p.id !== profile.id)];
+    });
 
     // Mark as read
     setUnreadProfiles((prev) => {
@@ -593,6 +619,13 @@ const App: React.FC = () => {
       return updated;
     });
 
+    // Move the actively messaged profile to the very first position (index 0) of allProfiles
+    setAllProfiles(prev => {
+      const target = prev.find(p => p.id === selectedProfile.id);
+      if (!target) return prev;
+      return [target, ...prev.filter(p => p.id !== selectedProfile.id)];
+    });
+
     return true;
   };
 
@@ -618,7 +651,10 @@ const App: React.FC = () => {
           profile={selectedProfile} 
           messages={chatHistory[selectedProfile.id] || []}
           onSendMessage={(text, isFromMe, type, voiceDuration) => handleSendMessage(text, isFromMe, type, voiceDuration)}
-          onBack={() => setSelectedProfile(null)}
+          onBack={() => {
+            setSelectedProfile(null);
+            setActiveTab('chats');
+          }}
           onCall={(type) => handleInitiateCall(type, selectedProfile)}
           credits={userCredits}
           onOpenAdModal={() => {
