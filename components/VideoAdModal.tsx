@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { creditService, AD_REWARD_CREDITS, AD_DURATION_SECONDS } from '../services/creditService';
+import { creditService, openInChrome, AD_REWARD_CREDITS, AD_DURATION_SECONDS } from '../services/creditService';
 
 export type AdModalReason = 'video_call' | 'audio_call' | 'voice_message' | 'message' | 'call' | 'topup';
 
@@ -63,10 +63,9 @@ const VideoAdModal: React.FC<VideoAdModalProps> = ({
   };
 
   const handleOpenExternal = () => {
-    if (typeof window !== 'undefined') {
-      window.open(smartlinkUrl, '_blank', 'noopener,noreferrer');
-    }
+    openInChrome(smartlinkUrl);
   };
+
 
   const handleRefreshIframe = () => {
     setIframeLoaded(false);
@@ -148,13 +147,13 @@ const VideoAdModal: React.FC<VideoAdModalProps> = ({
             <i className="fas fa-sync-alt"></i>
           </button>
 
-          {/* Open in External Browser Button */}
+          {/* Open in Chrome Browser Button */}
           <button
             onClick={handleOpenExternal}
             className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shrink-0 text-xs shadow-sm"
-            title="নতুন উইন্ডোতে খুলুন"
+            title="ক্রোম ব্রাউজারে খুলুন"
           >
-            <i className="fas fa-external-link-alt"></i>
+            <i className="fab fa-chrome"></i>
           </button>
         </div>
 
@@ -209,9 +208,10 @@ const VideoAdModal: React.FC<VideoAdModalProps> = ({
             ) : (
               <button
                 onClick={handleOpenExternal}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 text-[10px] font-semibold px-2 py-0.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 text-[10px] font-semibold px-2 py-0.5 rounded-lg transition-colors cursor-pointer shrink-0 flex items-center gap-1"
               >
-                সরাসরি দেখুন &rarr;
+                <i className="fab fa-chrome text-[9px] text-blue-400"></i>
+                <span>ক্রোমে দেখুন &rarr;</span>
               </button>
             )}
           </div>
@@ -225,6 +225,13 @@ const VideoAdModal: React.FC<VideoAdModalProps> = ({
             className="w-full h-full border-0 bg-white"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             title="Adsterra In-App Browser"
+          />
+
+          {/* Automatic Chrome Open: When visitor taps the ad, it launches Chrome */}
+          <div
+            onClick={handleOpenExternal}
+            className="absolute inset-0 z-10 cursor-pointer bg-transparent"
+            title="ক্রোম ব্রাউজারে দেখতে ট্যাপ করুন"
           />
 
           {/* Floating Action Banner at bottom of In-App Browser */}
@@ -254,10 +261,10 @@ const VideoAdModal: React.FC<VideoAdModalProps> = ({
             ) : (
               <button
                 onClick={handleOpenExternal}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] px-3 py-2 rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] px-3 py-2 rounded-xl shadow-md active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
               >
-                <span>লিংক খুলুন</span>
-                <i className="fas fa-external-link-alt text-[9px]"></i>
+                <i className="fab fa-chrome text-[10px]"></i>
+                <span>ক্রোমে খুলুন</span>
               </button>
             )}
           </div>

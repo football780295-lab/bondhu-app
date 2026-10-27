@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Profile } from '../types';
-import { creditService } from '../services/creditService';
+import { creditService, openInChrome } from '../services/creditService';
 
 interface StoryAdModalProps {
   isOpen: boolean;
@@ -16,9 +16,46 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
   onStartChat
 }) => {
   const [iframeKey, setIframeKey] = useState<number>(0);
+  const [showChromeToast, setShowChromeToast] = useState<boolean>(false);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const lastOpenTimeRef = useRef<number>(0);
   const smartlinkUrl = creditService.getSmartlink();
 
   if (!isOpen || !profile) return null;
+
+  const handleOpenChrome = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (e) e.stopPropagation();
+    const now = Date.now();
+    if (now - lastOpenTimeRef.current < 1200) return;
+    lastOpenTimeRef.current = now;
+
+    openInChrome(smartlinkUrl);
+    setShowChromeToast(true);
+    setTimeout(() => {
+      setShowChromeToast(false);
+    }, 2800);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartRef.current.x);
+    const deltaY = Math.abs(touch.clientY - touchStartRef.current.y);
+    const deltaTime = Date.now() - touchStartRef.current.time;
+
+    if (deltaX < 20 && deltaY < 20 && deltaTime < 450) {
+      handleOpenChrome(e);
+    }
+  };
 
   const handleRefresh = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -88,8 +125,18 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
               </div>
             </div>
 
-            {/* Actions: Refresh & Close (NO URL text, 100% clean) */}
+            {/* Actions: Chrome Browser, Refresh & Close (Clean, No URL text) */}
             <div className="flex items-center gap-1.5 shrink-0">
+              {/* Dedicated Chrome Button */}
+              <button
+                onClick={handleOpenChrome}
+                className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer text-xs shadow-xs"
+                title="ক্রোম ব্রাউজারে খুলুন"
+              >
+                <i className="fab fa-chrome"></i>
+              </button>
+
+              {/* Refresh Button */}
               <button
                 onClick={handleRefresh}
                 className="w-8 h-8 rounded-full bg-slate-700/80 hover:bg-slate-600 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer text-xs"
@@ -97,6 +144,8 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
               >
                 <i className="fas fa-sync-alt"></i>
               </button>
+
+              {/* Close Button */}
               <button
                 onClick={onClose}
                 className="w-8 h-8 rounded-full bg-slate-700 hover:bg-rose-600 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer text-xs shadow-xs"
@@ -108,7 +157,7 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
           </div>
         </div>
 
-        {/* ================= 2. THE IN-APP BROWSER (DIRECT SMARTLINK LOADING, NO OVERLAYS) ================= */}
+        {/* ================= 2. THE IN-APP BROWSER (DIRECT SMARTLINK LOADING) ================= */}
         <div className="flex-1 w-full bg-white relative overflow-hidden flex flex-col min-h-0">
           <iframe
             id="story-browser-frame"
@@ -118,6 +167,23 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             title={`${profile.name} Story Browser`}
           />
+
+          {/* Automatic Chrome Open: When visitor taps/clicks anywhere on the ad inside this in-app browser */}
+          <div
+            onClick={handleOpenChrome}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="absolute inset-0 z-10 cursor-pointer bg-transparent"
+            title="ক্রোম ব্রাউজারে দেখতে ট্যাপ করুন"
+          />
+
+          {/* Toast Notification when Chrome opens */}
+          {showChromeToast && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 bg-slate-900/95 border border-blue-500/60 text-white px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-2xl flex items-center gap-2 pointer-events-none animate-fade-in">
+              <i className="fab fa-chrome text-blue-400"></i>
+              <span>ক্রোম ব্রাউজারে ওপেন হচ্ছে...</span>
+            </div>
+          )}
         </div>
 
         {/* ================= 3. BOTTOM CHAT & ENGAGEMENT BAR ================= */}
@@ -144,3 +210,4 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
 };
 
 export default StoryAdModal;
+

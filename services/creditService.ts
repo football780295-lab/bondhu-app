@@ -193,3 +193,44 @@ class CreditService {
 }
 
 export const creditService = new CreditService();
+
+/**
+ * Automatically launches an ad/smartlink in Google Chrome on mobile devices.
+ * Uses Android Chrome Intent for mobile Chrome, with fallback to standard new tab.
+ */
+export const openInChrome = (targetUrl?: string): void => {
+  if (typeof window === 'undefined') return;
+  const url = targetUrl || creditService.getSmartlink();
+  const isAndroid = /Android/i.test(navigator.userAgent);
+
+  if (isAndroid) {
+    try {
+      const cleanUrl = url.replace(/^https?:\/\//, '');
+      const chromeIntent = `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;end`;
+      
+      const link = document.createElement('a');
+      link.href = chromeIntent;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Fallback in case intent is not caught
+      setTimeout(() => {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }, 400);
+      return;
+    } catch (_) {}
+  }
+
+  // iOS / Desktop fallback
+  const link = document.createElement('a');
+  link.href = url;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
