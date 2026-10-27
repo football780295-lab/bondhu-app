@@ -1381,19 +1381,14 @@ const App: React.FC = () => {
         }}
       />
 
-      {/* Facebook & Instagram Style In-App Story Viewer */}
+      {/* Dedicated Single-Profile In-App Story Browser */}
       <StoryAdModal
         isOpen={!!selectedStoryProfile}
         profile={selectedStoryProfile}
-        allProfiles={allProfiles.slice(0, 10)}
         onClose={() => setSelectedStoryProfile(null)}
-        onSelectProfile={(p) => setSelectedStoryProfile(p)}
-        onStartChat={(p, initialMsg) => {
+        onStartChat={(p) => {
           setSelectedStoryProfile(null);
           openChat(p);
-          if (initialMsg) {
-            handleSendMessage(initialMsg, true, 'text');
-          }
         }}
       />
     </div>
