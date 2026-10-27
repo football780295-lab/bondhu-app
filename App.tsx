@@ -161,7 +161,7 @@ const App: React.FC = () => {
   const [isVideoAdOpen, setIsVideoAdOpen] = useState(false);
   const [adModalReason, setAdModalReason] = useState<AdModalReason>('topup');
   const [isDownloadRequiredOpen, setIsDownloadRequiredOpen] = useState(false);
-  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(() => creditService.checkIsAppInstalled());
+  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(() => creditService.checkIsStandalone());
   const [selectedStoryProfile, setSelectedStoryProfile] = useState<Profile | null>(null);
 
   // Admin Panel State
@@ -276,6 +276,26 @@ const App: React.FC = () => {
       };
       window.addEventListener('bondhu-app-installed', handleCustomInstalled);
 
+      // Restore install button if app was uninstalled or browser can install
+      const handleCanInstall = () => {
+        if (!creditService.checkIsStandalone()) {
+          setIsAppInstalled(false);
+          creditService.setIsInstalled(false);
+        }
+      };
+      window.addEventListener('pwa-can-install', handleCanInstall);
+      window.addEventListener('bondhu-app-can-install', handleCanInstall);
+
+      // Check device installed related apps on load
+      if (typeof navigator !== 'undefined' && 'getInstalledRelatedApps' in navigator) {
+        (navigator as any).getInstalledRelatedApps().then((apps: any[]) => {
+          if (Array.isArray(apps) && apps.length === 0 && !creditService.checkIsStandalone()) {
+            creditService.clearStaleInstalledFlag();
+            setIsAppInstalled(false);
+          }
+        }).catch(() => {});
+      }
+
       // Listen for admin login event
       const handleAdminLogin = () => {
         setIsAdminPanelOpen(true);
@@ -358,6 +378,8 @@ const App: React.FC = () => {
         window.removeEventListener('bondhu-profiles-updated', handleWindowProfilesUpdated);
         window.removeEventListener('appinstalled', handleAppInstalled);
         window.removeEventListener('bondhu-app-installed', handleCustomInstalled);
+        window.removeEventListener('pwa-can-install', handleCanInstall);
+        window.removeEventListener('bondhu-app-can-install', handleCanInstall);
         window.removeEventListener('bondhu-admin-login', handleAdminLogin);
         window.removeEventListener('bondhu-incoming-profile-message', handleIncomingNotifMsg);
         window.removeEventListener('bondhu-notif-permission-changed', handleNotifPermissionChanged);

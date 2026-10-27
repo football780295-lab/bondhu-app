@@ -75,20 +75,35 @@
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     window.deferredInstallPrompt = e;
+    try {
+      localStorage.removeItem('BONDHU_APP_INSTALLED_FLAG_V1');
+      localStorage.removeItem('BONDHU_INSTALLED_KEY');
+    } catch (_) {}
     window.dispatchEvent(new CustomEvent('pwa-can-install'));
+    window.dispatchEvent(new CustomEvent('bondhu-app-can-install'));
   });
 
   window.addEventListener('appinstalled', () => {
     window.deferredInstallPrompt = null;
     try {
       localStorage.setItem('BONDHU_APP_INSTALLED_FLAG_V1', 'true');
-      localStorage.setItem('BONDHU_APP_INSTALLED_FLAG_V1', 'true');
-      localStorage.setItem('BONDHU_APP_INSTALLED_FLAG_V1', 'true');
-      localStorage.setItem('BONDHU_INSTALLED_KEY', 'true');
     } catch (_) {}
     window.dispatchEvent(new CustomEvent('bondhu-app-installed'));
     console.log('Bondhu App was installed successfully!');
   });
+
+  // Automatically check if PWA was uninstalled/deleted
+  if (typeof navigator !== 'undefined' && 'getInstalledRelatedApps' in navigator) {
+    navigator.getInstalledRelatedApps().then(function(apps) {
+      if (Array.isArray(apps) && apps.length === 0) {
+        try {
+          localStorage.removeItem('BONDHU_APP_INSTALLED_FLAG_V1');
+          localStorage.removeItem('BONDHU_INSTALLED_KEY');
+        } catch (_) {}
+        window.dispatchEvent(new CustomEvent('bondhu-app-can-install'));
+      }
+    }).catch(function() {});
+  }
 </script>
 </body>
 </html>

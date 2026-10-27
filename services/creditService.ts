@@ -52,8 +52,8 @@ class CreditService {
         this.guestMsgCount = parseInt(storedMsgCount, 10) || 0;
       }
 
-      const storedInstalled = localStorage.getItem(STORAGE_INSTALLED_KEY);
-      this.isInstalled = storedInstalled === 'true';
+      // Check real-time standalone display mode rather than relying on stale localStorage
+      this.isInstalled = this.checkIsStandalone();
 
       const storedAdsWatched = localStorage.getItem(STORAGE_ADS_WATCHED_KEY);
       if (storedAdsWatched !== null) {
@@ -76,33 +76,65 @@ class CreditService {
     return this.checkIsAppInstalled();
   }
 
-  public checkIsAppInstalled(): boolean {
+  /**
+   * Returns true ONLY if the app is currently running in standalone display mode
+   * (opened from the phone's home screen / launcher icon).
+   */
+  public checkIsStandalone(): boolean {
     if (typeof window === 'undefined') return false;
-    // 1. Running in standalone display mode (Opened from mobile home screen shortcut)
     try {
+      // 1. Android/Desktop PWA standalone display mode
       if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) {
         return true;
       }
-    } catch (_) {}
-
-    // 2. iOS standalone home screen
-    if ((window.navigator as any).standalone === true) {
-      return true;
-    }
-
-    // 3. Android app referrer
-    if (typeof document !== 'undefined' && document.referrer && document.referrer.startsWith('android-app://')) {
-      return true;
-    }
-
-    // 4. Stored flag in localStorage
-    try {
-      if (localStorage.getItem(STORAGE_INSTALLED_KEY) === 'true' || localStorage.getItem('BONDHU_APP_INSTALLED_FLAG_V1') === 'true') {
+      // 2. iOS Safari standalone home screen
+      if ((window.navigator as any).standalone === true) {
+        return true;
+      }
+      // 3. Android app / TWA launcher referrer
+      if (typeof document !== 'undefined' && document.referrer && document.referrer.startsWith('android-app://')) {
         return true;
       }
     } catch (_) {}
+    return false;
+  }
 
+  /**
+   * Checks whether the app is currently installed.
+   * If running in standalone mode, returns true.
+   * If in browser and install prompt is available, cleans up stale flags and returns false.
+   */
+  public checkIsAppInstalled(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    // 1. Standalone app is 100% installed right now
+    if (this.checkIsStandalone()) {
+      return true;
+    }
+
+    // 2. If deferredInstallPrompt is present, app is NOT installed on this device
+    if ((window as any).deferredInstallPrompt) {
+      this.clearStaleInstalledFlag();
+      return false;
+    }
+
+    // 3. In regular browser, check active session state
     return this.isInstalled;
+  }
+
+  /**
+   * Cleans up stale localStorage keys if user deleted/uninstalled the app
+   */
+  public clearStaleInstalledFlag(): void {
+    this.isInstalled = false;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_INSTALLED_KEY);
+        localStorage.removeItem('BONDHU_APP_INSTALLED_FLAG_V1');
+        localStorage.removeItem('BONDHU_INSTALLED_KEY');
+        window.dispatchEvent(new CustomEvent('bondhu-app-can-install'));
+      } catch (_) {}
+    }
   }
 
   public getSmartlink(): string {
@@ -130,8 +162,14 @@ class CreditService {
     this.isInstalled = val;
     if (typeof window !== 'undefined') {
       try {
-        localStorage.setItem(STORAGE_INSTALLED_KEY, val ? 'true' : 'false');
-        localStorage.setItem('BONDHU_APP_INSTALLED_FLAG_V1', val ? 'true' : 'false');
+        if (val) {
+          localStorage.setItem(STORAGE_INSTALLED_KEY, 'true');
+          localStorage.setItem('BONDHU_APP_INSTALLED_FLAG_V1', 'true');
+        } else {
+          localStorage.removeItem(STORAGE_INSTALLED_KEY);
+          localStorage.removeItem('BONDHU_APP_INSTALLED_FLAG_V1');
+          localStorage.removeItem('BONDHU_INSTALLED_KEY');
+        }
         window.dispatchEvent(new CustomEvent('bondhu-app-installed', { detail: { isInstalled: val } }));
       } catch (_) {}
     }

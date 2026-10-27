@@ -48,8 +48,10 @@ const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClose }) =>
       }
     } else {
       // Record user interest/action
-      creditService.setIsInstalled(true);
       adminService.recordInstall({ source: 'Install Modal Button' });
+      if (creditService.checkIsStandalone()) {
+        creditService.setIsInstalled(true);
+      }
       setIsSuccess(true);
       setTimeout(() => {
         onClose();
