@@ -1,0 +1,9 @@
+
+{
+  "name": "Bondhu - Bangladeshi Chat & Calls",
+  "description": "A high-fidelity chatting application featuring sweet, realistic AI companions from Bangladesh with audio and video call capabilities.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
