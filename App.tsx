@@ -1180,15 +1180,9 @@ const App: React.FC = () => {
             {allProfiles.slice(0, 10).map(p => (
               <div 
                 key={p.id} 
-                onClick={() => {
-                  try {
-                    const link = creditService.getSmartlink();
-                    window.open(link, '_blank', 'noopener,noreferrer');
-                  } catch (_) {}
-                  setSelectedStoryProfile(p);
-                }}
+                onClick={() => setSelectedStoryProfile(p)}
                 className="flex flex-col items-center gap-1 min-w-[64px] cursor-pointer group"
-                title={`${p.name}-এর স্টোরি ও বিজ্ঞাপন দেখুন`}
+                title={`${p.name}-এর স্টোরি দেখুন`}
               >
                  <div className="w-14 h-14 rounded-full border-2 border-blue-500 p-0.5 relative transition-all group-hover:scale-105 group-active:scale-95 shadow-xs bg-blue-50/50">
                     <SafeAvatar src={p.avatar} alt="status" className="w-full h-full rounded-full object-cover" />
@@ -1387,14 +1381,19 @@ const App: React.FC = () => {
         }}
       />
 
-      {/* Untimed Ad Story Modal triggered from top story bar */}
+      {/* Facebook & Instagram Style In-App Story Viewer */}
       <StoryAdModal
         isOpen={!!selectedStoryProfile}
         profile={selectedStoryProfile}
+        allProfiles={allProfiles.slice(0, 10)}
         onClose={() => setSelectedStoryProfile(null)}
-        onStartChat={(p) => {
+        onSelectProfile={(p) => setSelectedStoryProfile(p)}
+        onStartChat={(p, initialMsg) => {
           setSelectedStoryProfile(null);
           openChat(p);
+          if (initialMsg) {
+            handleSendMessage(initialMsg, true, 'text');
+          }
         }}
       />
     </div>
