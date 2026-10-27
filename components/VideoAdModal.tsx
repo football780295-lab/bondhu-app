@@ -219,28 +219,34 @@ const VideoAdModal: React.FC<VideoAdModalProps> = ({
 
         {/* ================= 3. IN-APP BROWSER WEBVIEW (ADS LINK IFRAME) ================= */}
         <div className="flex-1 w-full bg-slate-950 relative overflow-hidden flex flex-col">
-          {/* Iframe Loading Spinner */}
-          {!iframeLoaded && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-xs p-6 text-center space-y-3">
-              <div className="w-10 h-10 border-3 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
-              <div className="space-y-1">
-                <p className="text-xs font-bold text-white">বিজ্ঞাপন ব্রাউজার লোড হচ্ছে...</p>
-                <p className="text-[11px] font-mono text-emerald-400">{smartlinkUrl}</p>
-                <p className="text-[10px] text-slate-400">১৫ সেকেন্ড সময় গণনা শুরু হয়েছে</p>
-              </div>
+          {/* Active Ad Showcase & Browser Direct Link Area */}
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 via-slate-950 to-black p-6 text-center space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-400 via-rose-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-indigo-500/20">
+              <i className="fas fa-play text-2xl text-white ml-1"></i>
             </div>
-          )}
+            <div className="space-y-1.5 max-w-xs">
+              <div className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>স্পনসরড বিজ্ঞাপন সক্রিয়</span>
+              </div>
+              <h3 className="text-base font-bold text-white">Adsterra Sponsored Ad</h3>
+              <p className="text-xs text-slate-300">
+                বিজ্ঞাপনটি সরাসরি ব্রাউজারে দেখতে নিচের বাটনে ক্লিক করুন।
+              </p>
+            </div>
 
-          {/* Direct Embedded Ads Frame */}
-          <iframe
-            id="adsterra-browser-frame"
-            src={smartlinkUrl}
-            onLoad={() => setIframeLoaded(true)}
-            className="w-full h-full border-0 bg-white"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            title="Adsterra In-App Browser"
-          />
+            <button
+              onClick={handleOpenExternal}
+              className="bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-600 hover:from-emerald-400 hover:to-blue-500 active:scale-95 text-white font-extrabold text-xs py-3 px-6 rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer border border-emerald-400/40"
+            >
+              <span>👉 বিজ্ঞাপনটি দেখতে এখানে চাপুন</span>
+              <i className="fas fa-external-link-alt text-[10px]"></i>
+            </button>
+
+            <p className="text-[10px] text-slate-500 font-mono break-all max-w-xs">
+              {smartlinkUrl}
+            </p>
+          </div>
 
           {/* Floating Action Banner at bottom of In-App Browser */}
           <div className="absolute bottom-3 left-3 right-3 z-20 bg-slate-900/95 backdrop-blur-md border border-slate-700 text-white p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-3">

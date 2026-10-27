@@ -107,8 +107,13 @@ class CreditService {
 
   public getSmartlink(): string {
     if (typeof window === 'undefined') return DEFAULT_ADSTERRA_SMARTLINK;
-    const stored = localStorage.getItem(STORAGE_SMARTLINK_KEY);
-    return stored && stored.trim() ? stored.trim() : DEFAULT_ADSTERRA_SMARTLINK;
+    try {
+      const stored = localStorage.getItem(STORAGE_SMARTLINK_KEY);
+      if (stored && stored.trim() && stored.trim().startsWith('http')) {
+        return stored.trim();
+      }
+    } catch (_) {}
+    return DEFAULT_ADSTERRA_SMARTLINK;
   }
 
   public setSmartlink(url: string): void {

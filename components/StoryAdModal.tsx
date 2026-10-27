@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Profile } from '../types';
 import { creditService } from '../services/creditService';
 
@@ -15,18 +15,19 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
   onClose,
   onStartChat
 }) => {
-  const [iframeLoaded, setIframeLoaded] = useState(false);
-  const smartlinkUrl = creditService.getSmartlink();
-
   if (!isOpen || !profile) return null;
 
-  const handleOpenExternal = () => {
+  const smartlinkUrl = creditService.getSmartlink();
+
+  const handleOpenAd = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     if (typeof window !== 'undefined') {
       window.open(smartlinkUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
-  const handleStartChat = () => {
+  const handleStartChat = (e: React.MouseEvent) => {
+    e.stopPropagation();
     onClose();
     if (onStartChat) {
       onStartChat(profile);
@@ -39,13 +40,13 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
       onClick={onClose}
     >
       <div 
-        className="w-full h-full sm:h-[94vh] sm:max-w-md bg-slate-900 sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col relative border-0 sm:border sm:border-slate-700"
+        className="w-full h-full sm:h-[94vh] sm:max-w-md bg-slate-950 sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col relative border-0 sm:border sm:border-slate-800"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ================= 1. STORY HEADER BAR ================= */}
-        <div className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 p-3 flex flex-col gap-2 shrink-0 z-20">
+        <div className="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 p-3.5 flex flex-col gap-2.5 shrink-0 z-30">
           {/* Static Story Progress Bar (No auto-timer, user watches as long as they want) */}
-          <div className="w-full bg-slate-700/60 h-1 rounded-full overflow-hidden">
+          <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-blue-500 via-indigo-400 to-purple-500 w-full rounded-full"></div>
           </div>
 
@@ -71,7 +72,7 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
                   <h3 className="font-extrabold text-sm text-white truncate leading-tight">
                     {profile.name}
                   </h3>
-                  <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase tracking-wider shrink-0 shadow-xs">
+                  <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 shadow-xs">
                     Ad Story
                   </span>
                 </div>
@@ -86,9 +87,9 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
             {/* Actions: Open link in tab + Close */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
-                onClick={handleOpenExternal}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white flex items-center justify-center transition-all cursor-pointer text-xs"
-                title="ব্রাউজারে সরাসরি খুলুন"
+                onClick={handleOpenAd}
+                className="w-8 h-8 rounded-full bg-blue-600/80 hover:bg-blue-600 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer text-xs shadow-xs"
+                title="বিজ্ঞাপনটি সরাসরি ব্রাউজারে খুলুন"
               >
                 <i className="fas fa-external-link-alt"></i>
               </button>
@@ -103,63 +104,89 @@ const StoryAdModal: React.FC<StoryAdModalProps> = ({
           </div>
         </div>
 
-        {/* ================= 2. AD STORY CONTENT AREA ================= */}
-        <div className="flex-1 w-full bg-slate-950 relative overflow-hidden flex flex-col">
-          {/* Loading Indicator */}
-          {!iframeLoaded && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-sm p-6 text-center space-y-3">
-              <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              <div className="space-y-1">
-                <p className="text-xs font-bold text-white">স্টোরি বিজ্ঞাপন লোড হচ্ছে...</p>
-                <p className="text-[11px] font-mono text-emerald-400 break-all max-w-xs">{smartlinkUrl}</p>
-                <p className="text-[10px] text-slate-400">আপনার ইচ্ছেমতো সময় নিয়ে দেখতে পারবেন</p>
+        {/* ================= 2. AD STORY VISUAL SHOWCASE ================= */}
+        <div 
+          className="flex-1 w-full relative overflow-hidden flex flex-col justify-between p-5 bg-gradient-to-b from-slate-900 via-slate-950 to-black cursor-pointer"
+          onClick={handleOpenAd}
+          title="বিজ্ঞাপনটি দেখতে যেকোনো জায়গায় ক্লিক করুন"
+        >
+          {/* Blurred Background Image of Companion */}
+          <div className="absolute inset-0 overflow-hidden opacity-25 pointer-events-none">
+            <img 
+              src={profile.avatar} 
+              alt="bg" 
+              className="w-full h-full object-cover scale-125 blur-xl"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-slate-950/80 to-transparent"></div>
+          </div>
+
+          {/* Top Banner Notice */}
+          <div className="relative z-10 flex items-center justify-center">
+            <div className="inline-flex items-center gap-2 bg-blue-500/15 border border-blue-500/30 text-blue-300 px-3 py-1.5 rounded-full text-xs font-semibold backdrop-blur-md shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>বিজ্ঞাপন ও স্পেশাল অফার সক্রিয়</span>
+            </div>
+          </div>
+
+          {/* Center Interactive Ad Card */}
+          <div className="relative z-10 flex flex-col items-center text-center space-y-4 my-auto">
+            {/* Glowing Avatar / Story Ring */}
+            <div className="relative group">
+              <div className="w-24 h-24 rounded-full p-1 bg-gradient-to-tr from-amber-400 via-rose-500 to-purple-600 shadow-2xl animate-spin-slow">
+                <img 
+                  src={profile.avatar} 
+                  alt={profile.name} 
+                  className="w-full h-full rounded-full object-cover bg-slate-900"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&h=400&auto=format&fit=crop";
+                  }}
+                />
+              </div>
+              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full shadow-md uppercase tracking-wider whitespace-nowrap">
+                ★ SPONSORED
               </div>
             </div>
-          )}
 
-          {/* Embedded Smartlink Ad Frame */}
-          <iframe
-            src={smartlinkUrl}
-            onLoad={() => setIframeLoaded(true)}
-            className="w-full h-full border-0 bg-white"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-            title="Bondhu Ad Story"
-          />
-
-          {/* Fallback Banner Overlay at bottom of Story */}
-          <div className="absolute bottom-3 left-3 right-3 z-30 bg-slate-900/95 backdrop-blur-md border border-slate-700 text-white p-3.5 rounded-2xl shadow-2xl flex flex-col gap-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 shadow-md">
-                  <i className="fas fa-bullhorn text-sm"></i>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-white truncate">
-                    {profile.name}-এর স্পনসরড স্টোরি
-                  </p>
-                  <p className="text-[11px] text-emerald-400 font-semibold truncate">
-                    যতক্ষণ খুশি দেখুন • কোনো সময়সীমা নেই
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={handleStartChat}
-                className="bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 text-xs font-bold px-3 py-1.5 rounded-xl transition-all cursor-pointer shrink-0 flex items-center gap-1 active:scale-95"
-              >
-                <i className="fas fa-comment-dots text-xs"></i>
-                <span>চ্যাট</span>
-              </button>
+            {/* Headline and Copy */}
+            <div className="space-y-1.5 max-w-xs">
+              <h2 className="text-xl font-extrabold text-white leading-tight">
+                {profile.name}-এর স্টোরি বিজ্ঞাপন
+              </h2>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                আপনার জন্য চমৎকার স্পনসরড অফার! যত খুশি সময় নিয়ে দেখুন, কোনো সময়সীমা বা কাউন্টডাউন নেই।
+              </p>
             </div>
 
-            {/* Prominent Direct Click Action Button */}
+            {/* Big Glowing Main Call To Action Button */}
             <button
-              onClick={handleOpenExternal}
-              className="w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 active:scale-98 text-white font-extrabold text-xs py-2.5 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+              onClick={handleOpenAd}
+              className="w-full max-w-xs bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 active:scale-95 text-white font-black text-sm py-3.5 px-6 rounded-2xl shadow-xl shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer border border-blue-400/30 group"
             >
-              <span>👉 অফারটি সরাসরি ব্রাউজারে দেখতে ক্লিক করুন</span>
-              <i className="fas fa-external-link-alt text-[10px]"></i>
+              <span>👉 বিজ্ঞাপনটি দেখতে ক্লিক করুন</span>
+              <i className="fas fa-external-link-alt text-xs group-hover:translate-x-0.5 transition-transform"></i>
+            </button>
+
+            {/* Smartlink Info */}
+            <p className="text-[10px] text-slate-400 font-mono break-all max-w-xs bg-slate-900/60 px-3 py-1.5 rounded-lg border border-slate-800">
+              {smartlinkUrl}
+            </p>
+          </div>
+
+          {/* ================= 3. BOTTOM ACTION DOCK ================= */}
+          <div className="relative z-10 flex items-center gap-2.5 pt-2 border-t border-slate-800/80">
+            <button
+              onClick={handleStartChat}
+              className="flex-1 bg-slate-800/90 hover:bg-slate-700 active:scale-95 text-white text-xs font-bold py-3 px-4 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 border border-slate-700 shadow-md"
+            >
+              <i className="fas fa-comment-dots text-blue-400 text-sm"></i>
+              <span>{profile.name}-কে মেসেজ দিন</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="bg-slate-800/80 hover:bg-slate-700 active:scale-95 text-slate-300 hover:text-white text-xs font-bold py-3 px-4 rounded-xl transition-all cursor-pointer border border-slate-700"
+            >
+              বন্ধ করুন
             </button>
           </div>
         </div>
