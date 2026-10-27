@@ -1139,13 +1139,6 @@ const App: React.FC = () => {
         <div className="flex-1 min-h-0 overflow-y-auto bg-[#fafafa] scroll-container">
           {/* Horizontal Status Row */}
           <div className="flex gap-4 p-4 horizontal-scroll border-b border-gray-100 bg-white shrink-0">
-            <div className="flex flex-col items-center gap-1 min-w-[64px] cursor-pointer">
-               <div className="w-14 h-14 rounded-full border-2 border-dashed border-blue-400 flex items-center justify-center bg-blue-50 hover:bg-blue-100 transition-colors">
-                  <i className="fas fa-plus text-blue-500"></i>
-               </div>
-               <span className="text-[10px] text-gray-500 font-medium">My Status</span>
-            </div>
-
             {allProfiles.slice(0, 10).map(p => {
               const hasUnread = !!unreadProfiles[p.id];
               return (
