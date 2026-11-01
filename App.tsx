@@ -10,6 +10,7 @@ import AdminPanel from './components/AdminPanel';
 import VideoAdModal, { AdModalReason } from './components/VideoAdModal';
 import DownloadRequiredModal from './components/DownloadRequiredModal';
 import StoryAdModal from './components/StoryAdModal';
+import { ShareModal } from './components/ShareModal';
 import { firebaseService, AuthUser } from './services/firebaseService';
 import { adminService } from './services/adminService';
 import { 
@@ -179,6 +180,35 @@ const App: React.FC = () => {
     notificationService.getIntervalHours()
   );
   const [notifFeedbackToast, setNotifFeedbackToast] = useState<string | null>(null);
+
+  // Site & App Share State
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [shareFeedbackToast, setShareFeedbackToast] = useState<string | null>(null);
+
+  const handleOpenShareModal = () => {
+    setIsShareModalOpen(true);
+  };
+
+  const handleQuickCopyLink = async () => {
+    try {
+      const url = typeof window !== 'undefined' ? (window.location.origin || window.location.href) : 'https://bondhu-app.web.app';
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setShareFeedbackToast('✅ লিঙ্ক কপি হয়েছে! বন্ধুদের যেকোনো চ্যাটে পেস্ট করে শেয়ার করুন।');
+      setTimeout(() => setShareFeedbackToast(null), 3500);
+    } catch (_) {
+      setShareFeedbackToast('✅ লিঙ্ক কপি হয়েছে!');
+      setTimeout(() => setShareFeedbackToast(null), 3500);
+    }
+  };
 
   const handleRequestNotificationPermission = async () => {
     const granted = await notificationService.requestPermission();
@@ -823,6 +853,22 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Share Feedback Toast Banner */}
+      {shareFeedbackToast && (
+        <div className="absolute top-3 left-3 right-3 z-50 bg-indigo-600 text-white text-xs font-bold p-3 rounded-2xl shadow-2xl flex items-center justify-between gap-2 border border-indigo-400 animate-fadeIn">
+          <div className="flex items-center gap-2 min-w-0">
+            <i className="fas fa-check-circle text-white text-sm shrink-0"></i>
+            <span className="truncate">{shareFeedbackToast}</span>
+          </div>
+          <button 
+            onClick={() => setShareFeedbackToast(null)}
+            className="w-5 h-5 rounded-full bg-indigo-700 hover:bg-indigo-800 text-white flex items-center justify-center text-xs shrink-0 cursor-pointer"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+      )}
+
       {/* Admin Broadcast Announcement Banner (Controlled from Admin Panel) */}
       {appControl?.notice?.enabled && appControl?.notice?.text && (
         <div className={`px-3 py-1.5 text-xs font-bold flex items-center justify-between gap-2 shadow-sm z-30 shrink-0 transition-all ${
@@ -1120,8 +1166,60 @@ const App: React.FC = () => {
             </div>
           )}
 
+          {/* Share App & Invite Friends Card */}
+          <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 rounded-3xl p-5 text-white shadow-lg space-y-3 relative overflow-hidden">
+            <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-white/10 rounded-full blur-xl pointer-events-none"></div>
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-lg shrink-0 shadow-inner">
+                <i className="fas fa-share-nodes"></i>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-sm">বন্ধুদের সাইট শেয়ার করুন</h3>
+                <p className="text-xs text-purple-100 mt-0.5 leading-relaxed">
+                  WhatsApp, Facebook বা লিঙ্ক পাঠিয়ে বন্ধুদের সাথে ফ্রি চ্যাট ও ভিডিও কল করুন।
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                onClick={handleOpenShareModal}
+                className="flex-1 bg-white text-indigo-700 font-bold text-xs py-2.5 px-3 rounded-xl shadow-md hover:bg-indigo-50 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <i className="fas fa-paper-plane text-xs"></i>
+                <span>শেয়ার করুন (Share App)</span>
+              </button>
+              <button
+                onClick={handleQuickCopyLink}
+                className="bg-white/20 hover:bg-white/30 text-white font-bold text-xs py-2.5 px-3 rounded-xl border border-white/20 active:scale-98 transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                title="সাইট লিঙ্ক কপি করুন"
+              >
+                <i className="fas fa-copy text-xs"></i>
+                <span>লিঙ্ক কপি</span>
+              </button>
+            </div>
+          </div>
+
           {/* Account Menu Options */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 divide-y divide-gray-100 overflow-hidden">
+            {/* Share App Option in Menu */}
+            <div 
+              onClick={handleOpenShareModal}
+              className="p-4 flex items-center justify-between hover:bg-purple-50/60 cursor-pointer transition-colors bg-gradient-to-r from-purple-50/30 to-indigo-50/30"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm shadow-xs">
+                  <i className="fas fa-share-nodes"></i>
+                </div>
+                <div>
+                  <span className="text-sm font-semibold text-gray-800 block">সাইট শেয়ার করুন (Share App)</span>
+                  <span className="text-[11px] text-gray-500">WhatsApp, Facebook বা লিঙ্ক পাঠিয়ে বন্ধুদের ইনভাইট করুন</span>
+                </div>
+              </div>
+              <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200">
+                শেয়ার
+              </span>
+            </div>
+
             {/* Customize Profile Option */}
             <div 
               onClick={() => setIsEditProfileOpen(true)}
@@ -1462,6 +1560,14 @@ const App: React.FC = () => {
           setSelectedStoryProfile(null);
           openChat(p);
         }}
+      />
+
+      {/* Share Site / App Modal */}
+      <ShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        appName="Bondhu"
+        userDisplayName={authUser.displayName || undefined}
       />
     </div>
   );
