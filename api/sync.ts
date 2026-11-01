@@ -27,6 +27,7 @@ export default async function handler(req: any, res: any) {
       let profiles1: any[] = [];
       let profiles2: any[] = [];
       let greetings: any = {};
+      let appControl: any = null;
 
       if (r1.ok) {
         try {
@@ -35,6 +36,7 @@ export default async function handler(req: any, res: any) {
           if (d1.greetings && typeof d1.greetings === 'object') {
             greetings = { ...greetings, ...d1.greetings };
           }
+          if (d1.appControl) appControl = d1.appControl;
         } catch (_) {}
       }
 
@@ -45,6 +47,7 @@ export default async function handler(req: any, res: any) {
           if (d2.greetings && typeof d2.greetings === 'object') {
             greetings = { ...greetings, ...d2.greetings };
           }
+          if (d2.appControl && !appControl) appControl = d2.appControl;
         } catch (_) {}
       }
 
@@ -63,6 +66,7 @@ export default async function handler(req: any, res: any) {
         version: 2,
         profiles: combinedProfiles,
         greetings: greetings,
+        appControl: appControl,
         count: combinedProfiles.length
       });
     } catch (err: any) {
@@ -99,18 +103,22 @@ export default async function handler(req: any, res: any) {
       const chunk2 = allProfiles.slice(half);
 
       const nowIso = new Date().toISOString();
+      const appControl = bodyData.appControl || null;
+
       const payload1 = {
         version: 2,
         updatedAt: nowIso,
         profiles: chunk1,
-        greetings: greetings
+        greetings: greetings,
+        appControl: appControl
       };
 
       const payload2 = {
         version: 2,
         updatedAt: nowIso,
         profiles: chunk2,
-        greetings: greetings
+        greetings: greetings,
+        appControl: appControl
       };
 
       // Save both chunks in parallel to cloud storage bins

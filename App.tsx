@@ -155,6 +155,8 @@ const App: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [installModalAutoStart, setInstallModalAutoStart] = useState(false);
+  const [installModalSuccessOnly, setInstallModalSuccessOnly] = useState(false);
 
   // Credit & In-App Ads Monetization State
   const [userCredits, setUserCredits] = useState<number>(() => creditService.getCredits());
@@ -164,9 +166,10 @@ const App: React.FC = () => {
   const [isAppInstalled, setIsAppInstalled] = useState<boolean>(() => creditService.checkIsStandalone());
   const [selectedStoryProfile, setSelectedStoryProfile] = useState<Profile | null>(null);
 
-  // Admin Panel State
+  // Admin Panel & Live Web App Control State
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(() => adminService.isAdminLoggedIn());
   const [allProfiles, setAllProfiles] = useState<Profile[]>(() => adminService.getProfiles());
+  const [appControl, setAppControl] = useState(() => adminService.getAppControl());
 
   // Mobile Notification Bar Permission & Interval State
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(() => 
@@ -210,21 +213,9 @@ const App: React.FC = () => {
 
   const handleDownloadClick = () => {
     adminService.recordInstall({ source: 'Download Click' });
-    const promptEvent = (window as any).deferredInstallPrompt;
-    if (promptEvent) {
-      promptEvent.prompt();
-      promptEvent.userChoice.then((choice: any) => {
-        if (choice.outcome === 'accepted') {
-          adminService.recordInstall({ source: 'PWA Prompt Accepted' });
-          creditService.setIsInstalled(true);
-          setIsAppInstalled(true);
-          notificationService.requestPermission();
-          (window as any).deferredInstallPrompt = null;
-        }
-      }).catch(() => {});
-    } else {
-      setIsInstallModalOpen(true);
-    }
+    setInstallModalSuccessOnly(false);
+    setInstallModalAutoStart(true);
+    setIsInstallModalOpen(true);
   };
 
   useEffect(() => {
@@ -245,6 +236,11 @@ const App: React.FC = () => {
       }
     };
     window.addEventListener('bondhu-profiles-updated', handleWindowProfilesUpdated);
+
+    const handleAppControlUpdated = (e: any) => {
+      setAppControl(e.detail || adminService.getAppControl());
+    };
+    window.addEventListener('bondhu-app-control-updated', handleAppControlUpdated);
 
     // Real-time Credit balance subscription
     const unsubCredits = creditService.subscribe((c) => {
@@ -267,12 +263,18 @@ const App: React.FC = () => {
         adminService.recordInstall({ source: 'PWA Web App Installed Event' });
         creditService.setIsInstalled(true);
         setIsAppInstalled(true);
+        setInstallModalAutoStart(false);
+        setInstallModalSuccessOnly(true);
+        setIsInstallModalOpen(true);
         notificationService.requestPermission();
       };
       window.addEventListener('appinstalled', handleAppInstalled);
 
       const handleCustomInstalled = () => {
         setIsAppInstalled(true);
+        setInstallModalAutoStart(false);
+        setInstallModalSuccessOnly(true);
+        setIsInstallModalOpen(true);
       };
       window.addEventListener('bondhu-app-installed', handleCustomInstalled);
 
@@ -376,6 +378,7 @@ const App: React.FC = () => {
         unsubCredits();
         clearInterval(cloudSyncInterval);
         window.removeEventListener('bondhu-profiles-updated', handleWindowProfilesUpdated);
+        window.removeEventListener('bondhu-app-control-updated', handleAppControlUpdated);
         window.removeEventListener('appinstalled', handleAppInstalled);
         window.removeEventListener('bondhu-app-installed', handleCustomInstalled);
         window.removeEventListener('pwa-can-install', handleCanInstall);
@@ -575,6 +578,12 @@ const App: React.FC = () => {
   };
 
   const handleInitiateCall = (type: CallType, profile: Profile) => {
+    // Check if user is blocked by admin
+    if (adminService.isUserBlocked(authUser.uid) || adminService.isUserBlocked(authUser.email)) {
+      alert('⚠️ আপনার অ্যাকাউন্টটি অ্যাডমিন দ্বারা সাময়িকভাবে ব্লক বা স্থগিত করা হয়েছে।');
+      return;
+    }
+
     // Calling requires credits: Video Call = 5 credits, Audio Call = 3 credits
     const requiredCredits = type === 'video' ? VIDEO_CALL_CREDIT_COST : AUDIO_CALL_CREDIT_COST;
     if (userCredits < requiredCredits) {
@@ -597,6 +606,12 @@ const App: React.FC = () => {
     if (!selectedProfile) return false;
 
     if (isFromMe) {
+      // Check if user is blocked by admin
+      if (adminService.isUserBlocked(authUser.uid) || adminService.isUserBlocked(authUser.email)) {
+        alert('⚠️ আপনার অ্যাকাউন্টটি অ্যাডমিন দ্বারা সাময়িকভাবে ব্লক বা স্থগিত করা হয়েছে।');
+        return false;
+      }
+
       // 0. Admin has unlimited access for testing
       if (adminService.isAdminLoggedIn()) {
         // bypass limits
@@ -700,20 +715,24 @@ const App: React.FC = () => {
           isOpen={isDownloadRequiredOpen}
           onClose={() => setIsDownloadRequiredOpen(false)}
           onDownloadAndLogin={() => {
-            creditService.setIsInstalled(true);
             creditService.resetGuestCount();
             setIsDownloadRequiredOpen(false);
+            setInstallModalSuccessOnly(false);
+            setInstallModalAutoStart(true);
             setIsInstallModalOpen(true);
-            setTimeout(() => {
-              setIsAuthModalOpen(true);
-            }, 800);
           }}
         />
 
         {/* Install App Modal */}
         <InstallAppModal
           isOpen={isInstallModalOpen}
-          onClose={() => setIsInstallModalOpen(false)}
+          onClose={() => {
+            setIsInstallModalOpen(false);
+            setInstallModalAutoStart(false);
+            setInstallModalSuccessOnly(false);
+          }}
+          autoStart={installModalAutoStart}
+          isSuccessOnly={installModalSuccessOnly}
         />
 
         {/* Auth Modal for Login / Sign Up */}
@@ -801,6 +820,31 @@ const App: React.FC = () => {
           >
             <i className="fas fa-times"></i>
           </button>
+        </div>
+      )}
+
+      {/* Admin Broadcast Announcement Banner (Controlled from Admin Panel) */}
+      {appControl?.notice?.enabled && appControl?.notice?.text && (
+        <div className={`px-3 py-1.5 text-xs font-bold flex items-center justify-between gap-2 shadow-sm z-30 shrink-0 transition-all ${
+          appControl.notice.type === 'warning'
+            ? 'bg-amber-600 text-white'
+            : appControl.notice.type === 'promo'
+            ? 'bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 text-white'
+            : 'bg-emerald-600 text-white'
+        }`}>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <i className={`fas ${
+              appControl.notice.type === 'warning'
+                ? 'fa-exclamation-triangle'
+                : appControl.notice.type === 'promo'
+                ? 'fa-gift'
+                : 'fa-bullhorn'
+            } text-xs shrink-0 animate-pulse`}></i>
+            <span className="truncate">{appControl.notice.text}</span>
+          </div>
+          <span className="bg-white/20 text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase shrink-0">
+            নোটিশ
+          </span>
         </div>
       )}
 
@@ -1377,7 +1421,13 @@ const App: React.FC = () => {
       {/* Install App Modal */}
       <InstallAppModal
         isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
+        onClose={() => {
+          setIsInstallModalOpen(false);
+          setInstallModalAutoStart(false);
+          setInstallModalSuccessOnly(false);
+        }}
+        autoStart={installModalAutoStart}
+        isSuccessOnly={installModalSuccessOnly}
       />
 
       {/* 15-Second Rewarded Video Ad Modal (Same page, 15s countdown, rewards credits) */}
@@ -1395,11 +1445,11 @@ const App: React.FC = () => {
         isOpen={isDownloadRequiredOpen}
         onClose={() => setIsDownloadRequiredOpen(false)}
         onDownloadAndLogin={() => {
+          creditService.resetGuestCount();
           setIsDownloadRequiredOpen(false);
+          setInstallModalSuccessOnly(false);
+          setInstallModalAutoStart(true);
           setIsInstallModalOpen(true);
-          setTimeout(() => {
-            setIsAuthModalOpen(true);
-          }, 800);
         }}
       />
 

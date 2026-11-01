@@ -116,6 +116,14 @@ class FirebaseService {
       }
     }
 
+    // Keep admin records updated with the edited name/avatar
+    if (this.currentUser) {
+      adminService.updateUserSignup(this.currentUser.uid, {
+        name: cleanName,
+        avatar: photoURL
+      });
+    }
+
     this.notify();
     return this.currentUser!;
   }
@@ -181,6 +189,7 @@ class FirebaseService {
 
       // Record in Admin Analytics
       adminService.recordSignup({
+        id: newUser.uid,
         name: newUser.displayName,
         email: newUser.email,
         method: 'email',
@@ -282,6 +291,7 @@ class FirebaseService {
 
     // Record in Admin Analytics
     adminService.recordSignup({
+      id: user.uid,
       name: user.displayName,
       email: user.email,
       method: 'google',
@@ -318,6 +328,7 @@ class FirebaseService {
 
     // Record in Admin Analytics
     adminService.recordSignup({
+      id: user.uid,
       name: user.displayName,
       email: user.email,
       method: 'email',

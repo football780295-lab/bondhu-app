@@ -48,6 +48,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // User Full Information Details Modal state
+  const [selectedUserForDetails, setSelectedUserForDetails] = useState<UserSignupRecord | null>(null);
+
+  // Live Web App Control & Broadcast Notice state
+  const [appControl, setAppControl] = useState(() => adminService.getAppControl());
+  const [noticeText, setNoticeText] = useState(() => adminService.getAppControl().notice.text);
+  const [noticeEnabled, setNoticeEnabled] = useState(() => adminService.getAppControl().notice.enabled);
+  const [noticeType, setNoticeType] = useState(() => adminService.getAppControl().notice.type);
+  const [maintenanceMode, setMaintenanceMode] = useState(() => adminService.getAppControl().maintenanceMode);
+  const [appControlSaved, setAppControlSaved] = useState(false);
+
   // Admin Credentials form
   const [adminUser, setAdminUser] = useState(() => adminService.getCredentials().username);
   const [adminPass, setAdminPass] = useState(() => adminService.getCredentials().password);
@@ -67,6 +78,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
   // Subscribe to changes
   useEffect(() => {
+    // Automatically clean out any stale fake seed users from earlier sessions
+    adminService.removeFakeProfiles();
+    setSignups(adminService.getSignups());
+    setInstalls(adminService.getInstalls());
+    setProfiles(adminService.getProfiles());
+
     const unsubProfiles = adminService.subscribeProfiles((updatedProfiles) => {
       setProfiles(updatedProfiles);
     });
@@ -289,6 +306,57 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     setTimeout(() => setSmartlinkSaved(false), 3000);
   };
 
+  // User Full Information & Management Handlers
+  const handleViewUserDetails = (user: UserSignupRecord) => {
+    setSelectedUserForDetails({ ...user });
+  };
+
+  const handleToggleBlockUser = (userId: string) => {
+    const nextStatus = adminService.toggleBlockUser(userId);
+    setSignups(adminService.getSignups());
+    if (selectedUserForDetails && selectedUserForDetails.id === userId) {
+      setSelectedUserForDetails((prev) => (prev ? { ...prev, status: nextStatus } : null));
+    }
+    showToast(`✓ ইউজার স্ট্যাটাস পরিবর্তন হয়েছে: ${nextStatus === 'blocked' ? 'ব্লকড (Blocked)' : 'সক্রিয় (Active)'}`);
+  };
+
+  const handleAdjustCredits = (userId: string, delta: number) => {
+    const current = selectedUserForDetails?.credits !== undefined ? selectedUserForDetails.credits : 5;
+    const newCred = Math.max(0, current + delta);
+    adminService.updateUserCredits(userId, newCred);
+    setSignups(adminService.getSignups());
+    if (selectedUserForDetails && selectedUserForDetails.id === userId) {
+      setSelectedUserForDetails((prev) => (prev ? { ...prev, credits: newCred } : null));
+    }
+    showToast(`✓ ইউজারের ক্রেডিট আপডেট হয়েছে: ${newCred}`);
+  };
+
+  const handleRemoveFakeProfiles = () => {
+    if (window.confirm("আপনি কি নিশ্চিত সমস্ত ফেক প্রোফাইল ও ডামি ইউজার মুছে ফেলতে চান? এতে শুধু আসল রেজিস্টার্ড ইউজাররা থাকবেন।")) {
+      const res = adminService.removeFakeProfiles();
+      setSignups(adminService.getSignups());
+      setInstalls(adminService.getInstalls());
+      setProfiles(adminService.getProfiles());
+      showToast(`🗑️ ফেক প্রোফাইল মুছে ফেলা হয়েছে! (${res.removedSignups} জন ফেক একাউন্ট ও ${res.removedInstalls} টি লগ অপসারিত)`);
+    }
+  };
+
+  const handleSaveAppControl = (e: React.FormEvent) => {
+    e.preventDefault();
+    adminService.updateAppControl({
+      maintenanceMode: maintenanceMode,
+      notice: {
+        enabled: noticeEnabled,
+        text: noticeText.trim(),
+        type: noticeType
+      }
+    });
+    setAppControl(adminService.getAppControl());
+    setAppControlSaved(true);
+    showToast('✓ লাইভ ওয়েবসাইটের নোটিশ ও সেটিংস রিয়েল সাইটে সিঙ্ক হয়েছে!');
+    setTimeout(() => setAppControlSaved(false), 3000);
+  };
+
   // Add dummy test user
   const handleAddTestUser = () => {
     const names = ['সাকিব আল হাসান', 'তানজিনা আক্তার', 'মাহমুদুল হাসান', 'ফারজানা হক', 'আরিফুল ইসলাম'];
@@ -312,47 +380,47 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900 text-slate-100 flex flex-col font-sans overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-slate-900 text-slate-100 flex flex-col font-sans overflow-hidden w-full max-w-full">
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-60 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-semibold animate-bounce border border-emerald-400">
-          <i className="fas fa-check-circle text-lg"></i>
-          <span>{toastMessage}</span>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-60 bg-emerald-600 text-white px-4 py-2.5 sm:px-5 sm:py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm font-semibold animate-bounce border border-emerald-400 max-w-[90vw] text-center">
+          <i className="fas fa-check-circle text-base shrink-0"></i>
+          <span className="truncate">{toastMessage}</span>
         </div>
       )}
 
-      {/* Top Navbar */}
-      <header className="bg-slate-800/90 backdrop-blur-md border-b border-slate-700/80 px-4 py-3 flex items-center justify-between shrink-0 shadow-lg">
-        <div className="flex items-center gap-3">
+      {/* Top Navbar - 100% Mobile Friendly */}
+      <header className="bg-slate-800/95 backdrop-blur-md border-b border-slate-700/80 px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between shrink-0 shadow-lg w-full max-w-full">
+        <div className="flex items-center gap-2.5 min-w-0">
           <img 
             src="/icon-192.png" 
             alt="Bondhu Admin" 
-            className="w-10 h-10 rounded-2xl bg-white p-0.5 object-contain shadow-md shadow-blue-500/20 shrink-0" 
+            className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white p-0.5 object-contain shadow-md shadow-blue-500/20 shrink-0" 
           />
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-base md:text-lg text-white tracking-wide">
-                Bondhu Admin Panel
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <h1 className="font-extrabold text-sm sm:text-base md:text-lg text-white tracking-wide truncate">
+                Bondhu Admin
               </h1>
-              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-full flex items-center gap-1 shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                 LIVE
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[10px] sm:text-[11px] text-slate-400 hidden sm:block truncate">
               অ্যাপের সকল প্রোফাইল, সাইন আপ ও ইনস্টল নিয়ন্ত্রণ প্যানেল
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Back to App */}
           <button
             onClick={onClose}
-            className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-xl shadow-md transition-all flex items-center gap-1 cursor-pointer shrink-0"
             title="মূল অ্যাপে ফিরে যান"
           >
-            <i className="fas fa-arrow-left"></i>
+            <i className="fas fa-arrow-left text-xs"></i>
             <span className="hidden sm:inline">অ্যাপে ফিরে যান</span>
             <span className="sm:hidden">অ্যাপ</span>
           </button>
@@ -363,229 +431,223 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
               adminService.setAdminLoggedIn(false);
               onClose();
             }}
-            className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 active:scale-95 text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+            className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 active:scale-95 text-xs font-bold px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl transition-all flex items-center gap-1 cursor-pointer shrink-0"
             title="এডমিন লগআউট"
           >
-            <i className="fas fa-sign-out-alt"></i>
+            <i className="fas fa-sign-out-alt text-xs"></i>
             <span className="hidden sm:inline">লগআউট</span>
           </button>
         </div>
       </header>
 
-      {/* Main Tab Bar */}
-      <div className="bg-slate-800/50 border-b border-slate-700/60 px-4 flex gap-1 sm:gap-2 overflow-x-auto horizontal-scroll shrink-0">
+      {/* Main Tab Bar - Touch Scrollable with Crisp Labels */}
+      <div className="bg-slate-800/60 border-b border-slate-700/60 px-2 sm:px-4 flex gap-1 sm:gap-2 overflow-x-auto horizontal-scroll no-scrollbar shrink-0 w-full max-w-full">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
             activeTab === 'dashboard'
               ? 'border-blue-500 text-blue-400 bg-blue-500/10'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <i className="fas fa-chart-line"></i>
-          <span>ড্যাশবোর্ড (Dashboard)</span>
+          <i className="fas fa-chart-line text-xs"></i>
+          <span>ড্যাশবোর্ড</span>
         </button>
 
         <button
           onClick={() => setActiveTab('profiles')}
-          className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
             activeTab === 'profiles'
               ? 'border-blue-500 text-blue-400 bg-blue-500/10'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <i className="fas fa-users-cog"></i>
-          <span>প্রোফাইল কাস্টমাইজেশন ({profiles.length})</span>
+          <i className="fas fa-users-cog text-xs"></i>
+          <span>প্রোফাইল ({profiles.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('signups')}
-          className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
             activeTab === 'signups'
               ? 'border-blue-500 text-blue-400 bg-blue-500/10'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <i className="fas fa-user-plus"></i>
-          <span>সাইন আপ ইউজার ({signups.length})</span>
+          <i className="fas fa-user-check text-xs"></i>
+          <span>ইউজার ({signups.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('installs')}
-          className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
             activeTab === 'installs'
               ? 'border-blue-500 text-blue-400 bg-blue-500/10'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <i className="fas fa-download"></i>
-          <span>অ্যাপ ইনস্টল ({installs.length})</span>
+          <i className="fas fa-download text-xs"></i>
+          <span>ইনস্টল ({installs.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab('settings')}
-          className={`py-3 px-3.5 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer ${
+          className={`py-2.5 px-3 sm:py-3 sm:px-3.5 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
             activeTab === 'settings'
               ? 'border-blue-500 text-blue-400 bg-blue-500/10'
               : 'border-transparent text-slate-400 hover:text-slate-200'
           }`}
         >
-          <i className="fas fa-key"></i>
-          <span>এডমিন পাসওয়ার্ড ও সেটিংস</span>
+          <i className="fas fa-sliders-h text-xs"></i>
+          <span>সেটিংস ও নোটিশ</span>
         </button>
       </div>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-900/90 scroll-container">
+      {/* Main Content Area - Strictly Constrained to Screen Width */}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 sm:p-5 bg-slate-900/90 scroll-container w-full max-w-full">
         {/* ================= 1. DASHBOARD TAB ================= */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-6 max-w-7xl mx-auto">
-            {/* Top Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto w-full">
+            {/* Top Stat Cards - 2 Columns on Mobile, 4 Columns on PC */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full">
               {/* Card 1: Signups */}
               <div 
                 onClick={() => setActiveTab('signups')}
-                className="bg-gradient-to-br from-blue-900/50 to-blue-800/30 border border-blue-700/50 rounded-3xl p-5 shadow-xl relative overflow-hidden cursor-pointer hover:border-blue-500 transition-all hover:scale-[1.02]"
+                className="bg-gradient-to-br from-blue-900/50 to-blue-800/30 border border-blue-700/50 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg cursor-pointer hover:border-blue-500 transition-all hover:scale-[1.01]"
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-blue-300">মোট সাইন আপ ইউজার</p>
-                    <h3 className="text-3xl font-black text-white mt-1.5">{signups.length}</h3>
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs font-semibold text-blue-300 truncate">সাইন আপ ইউজার</p>
+                    <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">{signups.length}</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 text-xl shadow-inner">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 text-base sm:text-xl shrink-0 shadow-inner">
                     <i className="fas fa-user-check"></i>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-[11px] text-blue-200">
+                <div className="mt-2.5 hidden sm:flex items-center gap-2 text-[11px] text-blue-200">
                   <span className="bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full font-bold">
                     ✓ রেজিস্টার্ড
                   </span>
-                  <span>নতুন সাইন আপে রিয়েল-টাইমে বাড়বে</span>
+                  <span className="truncate">রিয়েল-টাইমে বাড়বে</span>
                 </div>
               </div>
 
               {/* Card 2: Installs */}
               <div 
                 onClick={() => setActiveTab('installs')}
-                className="bg-gradient-to-br from-emerald-900/50 to-emerald-800/30 border border-emerald-700/50 rounded-3xl p-5 shadow-xl relative overflow-hidden cursor-pointer hover:border-emerald-500 transition-all hover:scale-[1.02]"
+                className="bg-gradient-to-br from-emerald-900/50 to-emerald-800/30 border border-emerald-700/50 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg cursor-pointer hover:border-emerald-500 transition-all hover:scale-[1.01]"
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-emerald-300">মোট অ্যাপ ইনস্টল</p>
-                    <h3 className="text-3xl font-black text-white mt-1.5">{installs.length}</h3>
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs font-semibold text-emerald-300 truncate">অ্যাপ ইনস্টল</p>
+                    <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">{installs.length}</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-xl shadow-inner">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center text-emerald-400 text-base sm:text-xl shrink-0 shadow-inner">
                     <i className="fas fa-mobile-alt"></i>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-[11px] text-emerald-200">
+                <div className="mt-2.5 hidden sm:flex items-center gap-2 text-[11px] text-emerald-200">
                   <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold">
-                    📲 PWA & Download
+                    📲 PWA & App
                   </span>
-                  <span>মোবাইল ও পিসিতে ইনস্টল</span>
+                  <span className="truncate">মোবাইল ও পিসি</span>
                 </div>
               </div>
 
               {/* Card 3: Profiles */}
               <div 
                 onClick={() => setActiveTab('profiles')}
-                className="bg-gradient-to-br from-purple-900/50 to-purple-800/30 border border-purple-700/50 rounded-3xl p-5 shadow-xl relative overflow-hidden cursor-pointer hover:border-purple-500 transition-all hover:scale-[1.02]"
+                className="bg-gradient-to-br from-purple-900/50 to-purple-800/30 border border-purple-700/50 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg cursor-pointer hover:border-purple-500 transition-all hover:scale-[1.01]"
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-purple-300">মোট অ্যাক্টিভ প্রোফাইল</p>
-                    <h3 className="text-3xl font-black text-white mt-1.5">{profiles.length}</h3>
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs font-semibold text-purple-300 truncate">অ্যাক্টিভ প্রোফাইল</p>
+                    <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">{profiles.length}</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-400 text-xl shadow-inner">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-400 text-base sm:text-xl shrink-0 shadow-inner">
                     <i className="fas fa-heart"></i>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-[11px] text-purple-200">
+                <div className="mt-2.5 hidden sm:flex items-center gap-2 text-[11px] text-purple-200">
                   <span className="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-bold">
-                    কাস্টমাইজেশন রেডি
+                    ৪৪ জেলা
                   </span>
-                  <span>নাম ও ছবি এডিটযোগ্য</span>
+                  <span className="truncate">কাস্টমাইজেশন রেডি</span>
                 </div>
               </div>
 
               {/* Card 4: Video Ads Watched */}
-              <div className="bg-gradient-to-br from-amber-900/50 to-amber-800/30 border border-amber-700/50 rounded-3xl p-5 shadow-xl relative overflow-hidden">
+              <div className="bg-gradient-to-br from-amber-900/50 to-amber-800/30 border border-amber-700/50 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold text-amber-300">ভিডিও অ্যাড দেখা হয়েছে</p>
-                    <h3 className="text-3xl font-black text-white mt-1.5">{adsWatched} টি</h3>
+                  <div className="min-w-0">
+                    <p className="text-[11px] sm:text-xs font-semibold text-amber-300 truncate">অ্যাড দেখা হয়েছে</p>
+                    <h3 className="text-2xl sm:text-3xl font-black text-white mt-1">{adsWatched} টি</h3>
                   </div>
-                  <div className="w-12 h-12 rounded-2xl bg-amber-600/30 border border-amber-500/40 flex items-center justify-center text-amber-400 text-xl shadow-inner">
+                  <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-600/30 border border-amber-500/40 flex items-center justify-center text-amber-400 text-base sm:text-xl shrink-0 shadow-inner">
                     <i className="fas fa-play-circle"></i>
                   </div>
                 </div>
-                <div className="mt-4 flex items-center gap-2 text-[11px] text-amber-200">
+                <div className="mt-2.5 hidden sm:flex items-center gap-2 text-[11px] text-amber-200">
                   <span className="bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
-                    ১৫ সেকেন্ডের অ্যাড
+                    ১৫ সেকেন্ড
                   </span>
-                  <span>ক্রেডিট রিচার্জ কাউন্টার</span>
+                  <span className="truncate">ক্রেডিট রিচার্জ কাউন্টার</span>
                 </div>
               </div>
             </div>
 
-            {/* Quick Actions Bar */}
-            <div className="bg-slate-800/70 border border-slate-700 rounded-3xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-md">
+            {/* Quick Actions Bar - 100% Mobile Responsive */}
+            <div className="bg-slate-800/70 border border-slate-700 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-md w-full">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm">
+                <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm shrink-0">
                   <i className="fas fa-bolt"></i>
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white">কুইক অ্যাকশন (Quick Actions)</h4>
-                  <p className="text-[11px] text-slate-400">এডমিন কাজের জন্য শর্টকাট বোতাম</p>
+                  <h4 className="text-xs sm:text-sm font-bold text-white">কুইক অ্যাকশন (Quick Actions)</h4>
+                  <p className="text-[10px] sm:text-[11px] text-slate-400">এডমিন কাজের জন্য শর্টকাট বোতাম</p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 <button
                   onClick={handleAddNewProfile}
-                  className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                 >
                   <i className="fas fa-plus"></i>
-                  <span>নতুন প্রোফাইল যোগ করুন</span>
+                  <span>নতুন প্রোফাইল</span>
+                </button>
+                <button
+                  onClick={handleRemoveFakeProfiles}
+                  className="flex-1 sm:flex-initial bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  title="এডমিন প্যানেলের সমস্ত ফেক প্রোফাইল ও ডামি ইউজার মুছে ফেলুন"
+                >
+                  <i className="fas fa-trash-alt"></i>
+                  <span>ফেক প্রোফাইল মুছুন</span>
                 </button>
                 <button
                   onClick={() => {
                     window.dispatchEvent(new CustomEvent('bondhu-trigger-test-welcome'));
                     showToast('✓ ৩টি অটোমেটিক মেসেজ টেস্ট ট্রিগার করা হয়েছে!');
                   }}
-                  className="bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="flex-1 sm:flex-initial bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                   title="নতুন ইউজার ঢুকলে ৩টি আইডি থেকে পাঠানো মেসেজ টেস্ট করুন"
                 >
                   <i className="fas fa-robot"></i>
-                  <span>৩টি অটো মেসেজ টেস্ট</span>
+                  <span>অটো মেসেজ টেস্ট</span>
                 </button>
                 <button
                   onClick={async () => {
                     await notificationService.sendTestNotification();
                     showToast('✓ ফোনে ২-ঘণ্টার পুশ নোটিফিকেশন পাঠানো হয়েছে!');
                   }}
-                  className="bg-teal-600 hover:bg-teal-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  className="flex-1 sm:flex-initial bg-teal-600 hover:bg-teal-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
                   title="ফোনে ২ ঘণ্টার ব্যবধানে যে পুশ নোটিফিকেশন যাবে তা টেস্ট করুন"
                 >
                   <i className="fas fa-bell"></i>
-                  <span>২-ঘণ্টার নোটিফিকেশন টেস্ট</span>
-                </button>
-                <button
-                  onClick={handleAddTestUser}
-                  className="bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <i className="fas fa-user-plus"></i>
-                  <span>+১ টেস্ট সাইন আপ</span>
-                </button>
-                <button
-                  onClick={() => handleSimulateInstall('Android')}
-                  className="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
-                >
-                  <i className="fas fa-mobile-alt"></i>
-                  <span>+১ টেস্ট ইনস্টল (Android)</span>
+                  <span>পুশ নোটিফিকেশন</span>
                 </button>
                 <button
                   onClick={handleResetProfiles}
-                  className="bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-300 text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="flex-1 sm:flex-initial bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-300 text-xs font-semibold px-3 py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <i className="fas fa-undo"></i>
                   <span>ডিফল্ট রিস্টোর</span>
@@ -619,7 +681,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   {signups.slice(0, 5).map((user) => (
                     <div
                       key={user.id}
-                      className="bg-slate-900/60 border border-slate-800 rounded-2xl p-3 flex items-center justify-between hover:bg-slate-900/90 transition-colors"
+                      onClick={() => handleViewUserDetails(user)}
+                      className="bg-slate-900/60 border border-slate-800 rounded-2xl p-3 flex items-center justify-between hover:bg-slate-900/90 transition-colors cursor-pointer group hover:border-blue-500/40"
                     >
                       <div className="flex items-center gap-3">
                         <img
@@ -628,7 +691,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                           className="w-10 h-10 rounded-full border border-blue-500/40 object-cover bg-slate-800"
                         />
                         <div>
-                          <h5 className="font-bold text-xs text-white">{user.name}</h5>
+                          <div className="flex items-center gap-1.5">
+                            <h5 className="font-bold text-xs text-white group-hover:text-blue-400 transition-colors">{user.name}</h5>
+                            <span className="text-[9px] text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded font-mono">ফুল ইনফো</span>
+                          </div>
                           <p className="text-[11px] text-slate-400">{user.email}</p>
                         </div>
                       </div>
@@ -942,17 +1008,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   </span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  ব্যবহারকারী অ্যাপে সাইন আপ করলে স্বয়ংক্রিয়ভাবে এখানে তালিকাভুক্ত হয়।
+                  ব্যবহারকারী অ্যাপে সাইন আপ করলে স্বয়ংক্রিয়ভাবে এখানে তালিকাভুক্ত হয়। যেকোনো ইউজারের ফুল ইনফরমেশন দেখতে তার নামের ওপর ক্লিক করুন।
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleRemoveFakeProfiles}
+                  className="bg-rose-600/90 hover:bg-rose-600 active:scale-95 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  title="এডমিন প্যানেলের সমস্ত ফেক প্রোফাইল ও ডামি ইউজার মুছে ফেলুন"
+                >
+                  <i className="fas fa-trash-alt"></i>
+                  <span>ফেক প্রোফাইল মুছুন</span>
+                </button>
                 <button
                   onClick={handleAddTestUser}
                   className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <i className="fas fa-user-plus"></i>
-                  <span>+ টেস্ট ইউজার যোগ</span>
+                  <span>+ টেস্ট ইউজার</span>
                 </button>
                 <button
                   onClick={() => {
@@ -986,9 +1060,85 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
               <i className="fas fa-search absolute left-3.5 top-3 text-slate-400 text-xs"></i>
             </div>
 
-            {/* Users Table */}
-            <div className="bg-slate-800/90 border border-slate-700 rounded-3xl overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
+            {/* Mobile View: Clean Touch-Friendly User Cards (Zero Horizontal Overflow) */}
+            <div className="block md:hidden space-y-3 w-full">
+              {filteredUsers.map((u, i) => (
+                <div 
+                  key={u.id}
+                  onClick={() => handleViewUserDetails(u)}
+                  className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3.5 shadow-md space-y-2.5 w-full cursor-pointer hover:border-blue-500/50 transition-all active:scale-[0.99]"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={u.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${u.name}`}
+                        alt={u.name}
+                        className="w-10 h-10 rounded-full border border-blue-400/40 bg-slate-700 object-cover shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <h4 className="font-bold text-white text-xs truncate">{u.name}</h4>
+                          <span className="text-[10px] text-slate-400 font-mono">#{i + 1}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-mono truncate">{u.email}</p>
+                      </div>
+                    </div>
+
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 border ${
+                      u.status === 'blocked' 
+                        ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' 
+                        : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    }`}>
+                      {u.status === 'blocked' ? '🔴 Blocked' : '🟢 Active'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-300 pt-1.5 border-t border-slate-700/60">
+                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">
+                      💎 {u.credits !== undefined ? u.credits : 5} Credits
+                    </span>
+                    <span className="text-slate-400 capitalize flex items-center gap-1">
+                      <i className={`fab ${u.method === 'google' ? 'fa-google text-rose-400' : 'fa-envelope text-blue-400'}`}></i>
+                      <span>{u.method}</span>
+                      <span>•</span>
+                      <span>{new Date(u.createdAt).toLocaleDateString('bn-BD')}</span>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleViewUserDetails(u)}
+                      className="flex-1 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <i className="fas fa-eye text-xs"></i>
+                      <span>ফুল ইনফরমেশন ও কন্ট্রোল</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`আপনি কি "${u.name}" ইউজার রেকর্ডটি ডিলিট করতে চান?`)) {
+                          adminService.deleteSignup(u.id);
+                          showToast(`🗑️ ${u.name} ইউজার রেকর্ড মুছে ফেলা হয়েছে।`);
+                        }
+                      }}
+                      className="w-9 h-9 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                      title="ইউজার ডিলিট করুন"
+                    >
+                      <i className="fas fa-trash-alt text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {filteredUsers.length === 0 && (
+                <div className="p-8 text-center text-slate-500 text-xs bg-slate-800/50 rounded-2xl border border-slate-700">
+                  কোনো ইউজার পাওয়া যায়নি।
+                </div>
+              )}
+            </div>
+
+            {/* Desktop / Tablet View: Full Spreadsheet Table */}
+            <div className="hidden md:block bg-slate-800/90 border border-slate-700 rounded-3xl overflow-hidden shadow-xl w-full">
+              <div className="overflow-x-auto w-full">
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-700 font-semibold uppercase text-[10px] tracking-wider">
                     <tr>
@@ -997,22 +1147,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                       <th className="py-3.5 px-4">সাইন আপ সময়</th>
                       <th className="py-3.5 px-4">মেথড</th>
                       <th className="py-3.5 px-4">স্ট্যাটাস</th>
-                      <th className="py-3.5 px-4 text-right">অ্যাকশন</th>
+                      <th className="py-3.5 px-4">ক্রেডিট ব্যালেন্স</th>
+                      <th className="py-3.5 px-4 text-right">ফুল ইনফরমেশন ও অ্যাকশন</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/60">
                     {filteredUsers.map((u, i) => (
-                      <tr key={u.id} className="hover:bg-slate-700/30 transition-colors">
+                      <tr 
+                        key={u.id} 
+                        onClick={() => handleViewUserDetails(u)}
+                        className="hover:bg-slate-700/40 transition-colors cursor-pointer group"
+                      >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
                             <img
                               src={u.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${u.name}`}
                               alt={u.name}
-                              className="w-8 h-8 rounded-full border border-blue-400/40 bg-slate-700 object-cover"
+                              className="w-9 h-9 rounded-full border border-blue-400/40 bg-slate-700 object-cover"
                             />
                             <div>
-                              <span className="font-bold text-white block">{u.name}</span>
-                              <span className="text-[10px] text-slate-400 font-mono">#{i + 1}</span>
+                              <span className="font-bold text-white block group-hover:text-blue-400 transition-colors">{u.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono">#{i + 1} • ID: {u.id.substring(0, 8)}</span>
                             </div>
                           </div>
                         </td>
@@ -1036,23 +1191,42 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                            Active
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            u.status === 'blocked' 
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' 
+                              : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                          }`}>
+                            {u.status === 'blocked' ? '🔴 Blocked' : '🟢 Active'}
                           </span>
                         </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`আপনি কি "${u.name}" ইউজার রেকর্ডটি ডিলিট করতে চান?`)) {
-                                adminService.deleteSignup(u.id);
-                                showToast(`🗑️ ${u.name} ইউজার রেকর্ড মুছে ফেলা হয়েছে।`);
-                              }
-                            }}
-                            className="text-rose-400 hover:text-rose-300 p-1.5 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                            title="ইউজার ডিলিট করুন"
-                          >
-                            <i className="fas fa-trash-alt"></i>
-                          </button>
+                        <td className="py-3 px-4">
+                          <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            💎 {u.credits !== undefined ? u.credits : 5} Credits
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleViewUserDetails(u)}
+                              className="bg-blue-600/30 hover:bg-blue-600/60 text-blue-300 border border-blue-500/40 text-[11px] font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                              title="ইউজারের ফুল ইনফরমেশন দেখুন"
+                            >
+                              <i className="fas fa-eye text-xs"></i>
+                              <span>ফুল ইনফরমেশন</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`আপনি কি "${u.name}" ইউজার রেকর্ডটি ডিলিট করতে চান?`)) {
+                                  adminService.deleteSignup(u.id);
+                                  showToast(`🗑️ ${u.name} ইউজার রেকর্ড মুছে ফেলা হয়েছে।`);
+                                }
+                              }}
+                              className="text-rose-400 hover:text-rose-300 p-2 hover:bg-rose-500/20 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-500/30"
+                              title="ইউজার ডিলিট করুন"
+                            >
+                              <i className="fas fa-trash-alt text-xs"></i>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1133,15 +1307,66 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
               })}
             </div>
 
-            {/* Installs Timeline Table */}
-            <div className="bg-slate-800/90 border border-slate-700 rounded-3xl overflow-hidden shadow-xl">
+            {/* Mobile View: Clean Install Cards */}
+            <div className="block md:hidden space-y-2.5 w-full">
+              {installs.map((inst, i) => (
+                <div 
+                  key={inst.id}
+                  className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-3 shadow-md flex items-center justify-between gap-3 w-full"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-sm shrink-0">
+                      <i className={`fas ${
+                        inst.platform === 'Android'
+                          ? 'fa-robot'
+                          : inst.platform === 'iOS'
+                          ? 'fa-apple-alt'
+                          : 'fa-laptop'
+                      }`}></i>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white text-xs">{inst.platform} Device</span>
+                        <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.2 rounded-full">
+                          ইনস্টল সফল
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 truncate">{inst.source}</p>
+                      <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                        {new Date(inst.timestamp).toLocaleString('bn-BD', { dateStyle: 'short', timeStyle: 'short' })}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      adminService.deleteInstall(inst.id);
+                      showToast('🗑️ ইনস্টল লগ মুছে ফেলা হয়েছে।');
+                    }}
+                    className="w-8 h-8 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                    title="লগ ডিলিট করুন"
+                  >
+                    <i className="fas fa-trash-alt text-xs"></i>
+                  </button>
+                </div>
+              ))}
+
+              {installs.length === 0 && (
+                <div className="p-8 text-center text-slate-500 text-xs bg-slate-800/50 rounded-2xl border border-slate-700">
+                  এখনো কোনো ইনস্টল লগ হয়নি।
+                </div>
+              )}
+            </div>
+
+            {/* Desktop / Tablet View: Spreadsheet Table */}
+            <div className="hidden md:block bg-slate-800/90 border border-slate-700 rounded-3xl overflow-hidden shadow-xl w-full">
               <div className="p-4 border-b border-slate-700/80 bg-slate-900/60 flex items-center justify-between">
                 <span className="text-xs font-bold text-white uppercase tracking-wider">
                   বিস্তারিত ইনস্টলেশন রেকর্ড ({installs.length})
                 </span>
                 <span className="text-[11px] text-slate-400">রিয়েল-টাইম লগ</span>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto w-full">
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-slate-900/80 text-slate-400 border-b border-slate-700 font-semibold uppercase text-[10px] tracking-wider">
                     <tr>
@@ -1200,11 +1425,111 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
           </div>
         )}
 
-        {/* ================= 5. SETTINGS & CREDENTIALS TAB ================= */}
+        {/* ================= 5. SETTINGS & WEB APP CONTROLS TAB ================= */}
         {activeTab === 'settings' && (
-          <div className="space-y-6 max-w-3xl mx-auto">
+          <div className="space-y-4 sm:space-y-6 max-w-3xl mx-auto w-full">
+            {/* Live Web App Control & Broadcast Announcement Card */}
+            <div className="bg-slate-800/95 border border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl w-full">
+              <div className="flex items-center gap-3 mb-4 pb-3 border-b border-slate-700">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg sm:text-xl shrink-0 shadow-inner">
+                  <i className="fas fa-bullhorn"></i>
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>লাইভ ওয়েবসাইট নিয়ন্ত্রণ ও ব্রডকাস্ট নোটিশ</span>
+                    <span className="bg-indigo-500/20 text-indigo-400 text-[10px] px-2 py-0.5 rounded-full border border-indigo-500/30 font-bold">
+                      রিয়েল-সাইট কানেকশন
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    এখানে যা পরিবর্তন করবেন, তা সাথে সাথে রিয়েল ওয়েবসাইটে সকল ভিজিটরদের কাছে লাইভ প্রদর্শিত হবে।
+                  </p>
+                </div>
+              </div>
+
+              {appControlSaved && (
+                <div className="mb-4 p-3 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs rounded-xl flex items-center gap-2">
+                  <i className="fas fa-check-circle"></i>
+                  <span>লাইভ ওয়েবসাইটের সেটিংস ক্লাউডে সেভ হয়েছে!</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveAppControl} className="space-y-4">
+                {/* Notice Toggle */}
+                <div className="bg-slate-900/60 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-700/60 flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">ওয়েবসাইটের শীর্ষে নোটিশ ব্যানার চালু রাখুন</h4>
+                    <p className="text-[11px] text-slate-400">চালু থাকলে রিয়েল সাইটে ঢোকামাত্র সকল ভিজিটর উপরে এই ব্যানার দেখতে পাবে।</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={noticeEnabled}
+                      onChange={(e) => setNoticeEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                {/* Notice Text */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                    লাইভ নোটিশ বার্তা (Announcement Banner Text)
+                  </label>
+                  <input
+                    type="text"
+                    value={noticeText}
+                    onChange={(e) => setNoticeText(e.target.value)}
+                    placeholder="যেমন: 🎉 বিশেষ অফার! ফ্রি ভিডিও কল ক্রেডিট চালু আছে। বন্ধুত্ব করতে মেসেজ দিন!"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Notice Type */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      নোটিশের ধরন (Theme Color)
+                    </label>
+                    <select
+                      value={noticeType}
+                      onChange={(e) => setNoticeType(e.target.value as any)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="promo">🎁 প্রচার / অফার (পার্পল-গোলাপি ব্যানার)</option>
+                      <option value="info">📢 সাধারণ নোটিশ (সবুজ ব্যানার)</option>
+                      <option value="warning">⚠️ সতর্কতা / জরুরি তথ্য (কমলা ব্যানার)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                      ওয়েবসাইট মেইনটেন্যান্স মোড
+                    </label>
+                    <select
+                      value={maintenanceMode ? 'true' : 'false'}
+                      onChange={(e) => setMaintenanceMode(e.target.value === 'true')}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="false">🟢 স্বাভাবিক চালু (Normal Live Active)</option>
+                      <option value="true">🛠️ মেইনটেন্যান্স চালু (Maintenance Mode)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-98 text-white text-xs font-bold py-3 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <i className="fas fa-satellite-dish"></i>
+                  <span>লাইভ ওয়েবসাইটে সাথে সাথে সিঙ্ক ও কার্যকর করুন</span>
+                </button>
+              </form>
+            </div>
+
             {/* Admin Credentials Card */}
-            <div className="bg-slate-800/90 border border-slate-700 rounded-3xl p-6 shadow-xl">
+            <div className="bg-slate-800/90 border border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl w-full">
               <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-700">
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl">
                   <i className="fas fa-key"></i>
@@ -1437,36 +1762,36 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
       {/* ================= EDIT / ADD PROFILE MODAL ================= */}
       {editingProfile && (
-        <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 z-60 bg-black/75 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto animate-fade-in">
           <div
-            className="bg-slate-800 border border-slate-700 w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[90vh]"
+            className="bg-slate-800 border border-slate-700 w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white p-5 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-lg">
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white p-3.5 sm:p-5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-white/20 flex items-center justify-center text-base sm:text-lg shrink-0">
                   <i className={`fas ${isAddMode ? 'fa-user-plus' : 'fa-user-edit'}`}></i>
                 </div>
-                <div>
-                  <h3 className="font-bold text-base leading-tight">
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm sm:text-base leading-tight truncate">
                     {isAddMode ? 'নতুন প্রোফাইল যোগ করুন' : `প্রোফাইল কাস্টমাইজেশন: ${editingProfile.name || 'Edit'}`}
                   </h3>
-                  <p className="text-[11px] text-blue-100">
+                  <p className="text-[10px] sm:text-[11px] text-blue-100 truncate">
                     নাম, ছবি ও স্ট্যাটাস পরিবর্তন করুন (অ্যাপের সাথে লাইভ সিঙ্ক হবে)
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setEditingProfile(null)}
-                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
               >
                 <i className="fas fa-times text-xs"></i>
               </button>
             </div>
 
             {/* Modal Body */}
-            <form onSubmit={handleSaveProfile} noValidate className="p-5 overflow-y-auto scroll-container space-y-4 flex-1">
+            <form onSubmit={handleSaveProfile} noValidate className="p-3.5 sm:p-5 overflow-y-auto scroll-container space-y-3.5 sm:space-y-4 flex-1">
               {/* Avatar Preview & Customization */}
               <div className="bg-slate-900/60 border border-slate-700/80 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center gap-4">
@@ -1679,44 +2004,286 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         />
       )}
 
-      {/* Export Profiles JSON Modal */}
-      {showExportModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-900/60 to-slate-800 p-5 border-b border-slate-700 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-lg">
-                  <i className="fas fa-file-code"></i>
+      {/* ================= USER FULL INFORMATION MODAL ================= */}
+      {selectedUserForDetails && (
+        <div 
+          className="fixed inset-0 z-60 bg-black/80 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto animate-fade-in"
+          onClick={() => setSelectedUserForDetails(null)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700 w-full max-w-xl rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white p-3.5 sm:p-5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                <div className="relative shrink-0">
+                  <img
+                    src={selectedUserForDetails.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${selectedUserForDetails.name}`}
+                    alt={selectedUserForDetails.name}
+                    className="w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl object-cover border-2 border-white/60 bg-slate-800 shadow-md"
+                  />
+                  <span className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${
+                    selectedUserForDetails.status === 'blocked' ? 'bg-rose-500' : 'bg-emerald-400'
+                  }`}></span>
                 </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">প্রোফাইল ডেটা ব্যাকআপ ও কোড এক্সপোর্ট</h3>
-                  <p className="text-xs text-slate-400">সকল প্রোফাইলের বর্তমান JSON ডেটা কপি বা ব্যাকআপ রাখুন</p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <h3 className="font-extrabold text-sm sm:text-base md:text-lg text-white leading-tight truncate">
+                      {selectedUserForDetails.name}
+                    </h3>
+                    <span className={`text-[9px] sm:text-[10px] font-extrabold px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-full border shrink-0 ${
+                      selectedUserForDetails.status === 'blocked'
+                        ? 'bg-rose-500/30 text-rose-200 border-rose-400/50'
+                        : 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
+                    }`}>
+                      {selectedUserForDetails.status === 'blocked' ? '🔴 ব্লকড' : '🟢 সক্রিয়'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-blue-100 font-mono mt-0.5 truncate">
+                    {selectedUserForDetails.email || 'কোনো ইমেইল নেই'}
+                  </p>
                 </div>
               </div>
+
               <button
-                onClick={() => setShowExportModal(false)}
-                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                onClick={() => setSelectedUserForDetails(null)}
+                className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="বন্ধ করুন"
               >
                 <i className="fas fa-times text-xs"></i>
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto flex-1 space-y-3">
-              <p className="text-xs text-slate-300">
+            {/* Modal Body */}
+            <div className="p-3.5 sm:p-5 overflow-y-auto scroll-container space-y-3 sm:space-y-4 flex-1 text-slate-200 text-xs">
+              {/* Essential IDs & Registration Info Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+                {/* User ID */}
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-3.5">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-semibold block mb-1">
+                    ইউজার আইডি (User UID):
+                  </span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-blue-300 text-[11px] sm:text-xs break-all select-all">
+                      {selectedUserForDetails.id}
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedUserForDetails.id);
+                        showToast('✓ ইউজার আইডি কপি করা হয়েছে!');
+                      }}
+                      className="bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white p-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                      title="আইডি কপি করুন"
+                    >
+                      <i className="fas fa-copy text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Registration Method */}
+                <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-3.5">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-semibold block mb-1">
+                    সাইন আপ মেথড (Provider):
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] sm:text-[11px] font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-xl flex items-center gap-1.5 capitalize ${
+                      selectedUserForDetails.method === 'google'
+                        ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                        : selectedUserForDetails.method === 'email'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}>
+                      <i className={`fab ${
+                        selectedUserForDetails.method === 'google' ? 'fa-google' : 'fa-envelope'
+                      }`}></i>
+                      <span>{selectedUserForDetails.method === 'google' ? 'Google Auth' : selectedUserForDetails.method === 'email' ? 'Email & Password' : 'Guest User'}</span>
+                    </span>
+                    <span className="bg-emerald-500/20 text-emerald-300 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 sm:px-2 sm:py-0.5 rounded-full border border-emerald-500/30">
+                      ✓ ভেরিফাইড
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Exact Date & Time */}
+              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
+                <div>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-semibold block">নিবন্ধনের তারিখ ও সময়:</span>
+                  <span className="font-bold text-white text-[11px] sm:text-xs mt-0.5 block">
+                    {new Date(selectedUserForDetails.createdAt).toLocaleString('bn-BD', {
+                      dateStyle: 'full',
+                      timeStyle: 'medium'
+                    })}
+                  </span>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[9px] sm:text-[10px] text-slate-400 font-mono break-all">
+                    {new Date(selectedUserForDetails.createdAt).toISOString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Platform & Device Log */}
+              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3 sm:p-3.5 space-y-2">
+                <span className="text-[10px] sm:text-[11px] text-slate-400 font-semibold block">ডিভাইস ও প্ল্যাটফর্ম তথ্য:</span>
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                  <div className="bg-slate-900/80 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5">
+                    <i className="fas fa-desktop text-blue-400 text-xs"></i>
+                    <span className="text-[11px] sm:text-xs font-semibold text-slate-200">
+                      প্ল্যাটফর্ম: {selectedUserForDetails.platform || 'ওয়েব ব্রাউজার'}
+                    </span>
+                  </div>
+                  <div className="bg-slate-900/80 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl border border-slate-700 flex items-center gap-1.5">
+                    <i className="fas fa-clock text-teal-400 text-xs"></i>
+                    <span className="text-[11px] sm:text-xs font-semibold text-slate-200">
+                      সর্বশেষ সক্রিয়: {selectedUserForDetails.lastActive ? new Date(selectedUserForDetails.lastActive).toLocaleTimeString() : 'এখনই'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Credits & Wallet Management Card */}
+              <div className="bg-gradient-to-br from-amber-950/40 via-slate-800 to-slate-800 border border-amber-600/40 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-2.5 sm:space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm shadow-inner shrink-0">
+                      <i className="fas fa-coins"></i>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-white text-xs">ক্রেডিট ব্যালেন্স ম্যানেজমেন্ট</h4>
+                      <p className="text-[10px] sm:text-[11px] text-amber-300/80">কথা বলা ও ভিডিও কলের পয়েন্ট</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl sm:text-2xl font-black text-amber-400">
+                      {selectedUserForDetails.credits !== undefined ? selectedUserForDetails.credits : 5}
+                    </span>
+                    <span className="text-[11px] text-amber-200/80 ml-1">Credits</span>
+                  </div>
+                </div>
+
+                {/* Quick Add / Deduct Credit Buttons */}
+                <div className="flex items-center gap-1.5 sm:gap-2 pt-1 flex-wrap">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400">এডমিন রিচার্জ:</span>
+                  <button
+                    onClick={() => handleAdjustCredits(selectedUserForDetails.id, 5)}
+                    className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 active:scale-95 text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer"
+                  >
+                    +৫
+                  </button>
+                  <button
+                    onClick={() => handleAdjustCredits(selectedUserForDetails.id, 10)}
+                    className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 active:scale-95 text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer"
+                  >
+                    +১০
+                  </button>
+                  <button
+                    onClick={() => handleAdjustCredits(selectedUserForDetails.id, 25)}
+                    className="bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 active:scale-95 text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer"
+                  >
+                    +২৫ বোনাস
+                  </button>
+                  <button
+                    onClick={() => handleAdjustCredits(selectedUserForDetails.id, -5)}
+                    className="bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 active:scale-95 text-[11px] font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer"
+                    title="৫ ক্রেডিট কেটে নিন"
+                  >
+                    -৫
+                  </button>
+                </div>
+              </div>
+
+              {/* Account Status Toggle (Block/Unblock) */}
+              <div className="bg-slate-800/80 border border-slate-700/80 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-bold text-white text-xs">অ্যাকাউন্ট স্ট্যাটাস ও নিয়ন্ত্রণ</h4>
+                  <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">
+                    {selectedUserForDetails.status === 'blocked'
+                      ? 'এই অ্যাকাউন্টটি বর্তমানে সাময়িকভাবে ব্লক করা আছে।'
+                      : 'অ্যাকাউন্টটি সক্রিয় রয়েছে এবং নিয়মিত ব্যবহার হচ্ছে।'}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => handleToggleBlockUser(selectedUserForDetails.id)}
+                  className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
+                    selectedUserForDetails.status === 'blocked'
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
+                      : 'bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/30'
+                  }`}
+                >
+                  <i className={`fas ${selectedUserForDetails.status === 'blocked' ? 'fa-user-check' : 'fa-user-slash'}`}></i>
+                  <span>{selectedUserForDetails.status === 'blocked' ? 'আনব্লক করুন (Unblock)' : 'ব্লক করুন (Block)'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3.5 sm:p-4 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between gap-3 shrink-0">
+              <button
+                onClick={() => {
+                  if (window.confirm(`আপনি কি "${selectedUserForDetails.name}" ইউজার রেকর্ডটি স্থায়ীভাবে মুছে ফেলতে চান?`)) {
+                    adminService.deleteSignup(selectedUserForDetails.id);
+                    setSelectedUserForDetails(null);
+                    showToast('🗑️ ইউজার সফলভাবে ডিলিট করা হয়েছে।');
+                  }
+                }}
+                className="text-rose-400 hover:text-rose-300 text-xs font-bold px-2 sm:px-3 py-2 rounded-xl hover:bg-rose-500/10 transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <i className="fas fa-trash-alt"></i>
+                <span>ইউজার ডিলিট</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedUserForDetails(null)}
+                className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold py-2 sm:py-2.5 px-4 sm:px-6 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer shrink-0"
+              >
+                বন্ধ করুন (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Profiles JSON Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-900/60 to-slate-800 p-4 sm:p-5 border-b border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-base sm:text-lg shrink-0">
+                  <i className="fas fa-file-code"></i>
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm sm:text-base font-bold text-white truncate">প্রোফাইল ডেটা ব্যাকআপ ও কোড এক্সপোর্ট</h3>
+                  <p className="text-[10px] sm:text-xs text-slate-400 truncate">সকল প্রোফাইলের বর্তমান JSON ডেটা কপি বা ব্যাকআপ রাখুন</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+              >
+                <i className="fas fa-times text-xs"></i>
+              </button>
+            </div>
+
+            <div className="p-3.5 sm:p-5 overflow-y-auto flex-1 space-y-3">
+              <p className="text-[11px] sm:text-xs text-slate-300">
                 নিচের কোডটি কপি করে আপনি যে কোনো সময় ব্যাকআপ রাখতে পারেন অথবা সরাসরি প্রোফাইলগুলো সংরক্ষণ করতে পারেন:
               </p>
               <textarea
                 readOnly
                 value={exportedJsonText}
-                className="w-full h-80 bg-slate-950 border border-slate-800 rounded-2xl p-4 font-mono text-xs text-blue-300 focus:outline-none select-all scroll-container"
+                className="w-full h-72 sm:h-80 bg-slate-950 border border-slate-800 rounded-xl sm:rounded-2xl p-3 sm:p-4 font-mono text-[11px] sm:text-xs text-blue-300 focus:outline-none select-all scroll-container"
               />
             </div>
 
-            <div className="p-4 bg-slate-900/90 border-t border-slate-800 flex items-center justify-end gap-3">
+            <div className="p-3.5 sm:p-4 bg-slate-900/90 border-t border-slate-800 flex items-center justify-end gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="px-4 py-2 text-xs text-slate-400 hover:text-white font-semibold transition-colors cursor-pointer"
+                className="px-3 sm:px-4 py-2 text-xs text-slate-400 hover:text-white font-semibold transition-colors cursor-pointer"
               >
                 বন্ধ করুন
               </button>
@@ -1726,7 +2293,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   navigator.clipboard.writeText(exportedJsonText);
                   showToast('✓ সম্পূর্ণ JSON ডেটা ক্লিপবোর্ডে কপি করা হয়েছে!');
                 }}
-                className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold py-2.5 px-5 rounded-xl shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+                className="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold py-2 sm:py-2.5 px-4 sm:px-5 rounded-xl shadow-lg transition-all flex items-center gap-1.5 sm:gap-2 cursor-pointer"
               >
                 <i className="fas fa-copy"></i>
                 <span>ক্লিপবোর্ডে কপি করুন (Copy JSON)</span>

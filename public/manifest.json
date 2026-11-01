@@ -9,6 +9,8 @@
   "orientation": "portrait",
   "background_color": "#2e88ff",
   "theme_color": "#2e88ff",
+  "prefer_related_applications": false,
+  "categories": ["social", "communication", "lifestyle"],
   "icons": [
     {
       "src": "/icon-192.png",
@@ -33,6 +35,15 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Bondhu চ্যাট",
+      "short_name": "চ্যাট",
+      "description": "বন্ধুদের সাথে চ্যাট ও অডিও-ভিডিও কল করুন",
+      "url": "/",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ]
 }

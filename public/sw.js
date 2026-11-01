@@ -11,8 +11,14 @@ const STATIC_URLS = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_URLS);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      for (const url of STATIC_URLS) {
+        try {
+          await cache.add(url);
+        } catch (e) {
+          console.warn('SW cache add item failed:', url, e);
+        }
+      }
     })
   );
   self.skipWaiting();

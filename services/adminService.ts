@@ -9,6 +9,13 @@ export interface UserSignupRecord {
   method: 'email' | 'google' | 'guest';
   status: 'active' | 'blocked';
   avatar?: string;
+  phone?: string;
+  credits?: number;
+  lastActive?: string;
+  isVerified?: boolean;
+  totalMessagesSent?: number;
+  platform?: string;
+  userAgent?: string;
 }
 
 export interface AppInstallRecord {
@@ -24,6 +31,18 @@ export interface AdminCredentials {
   password: string;
 }
 
+export interface AppNoticeConfig {
+  enabled: boolean;
+  text: string;
+  type: 'info' | 'warning' | 'promo';
+}
+
+export interface WebAppControlConfig {
+  maintenanceMode: boolean;
+  freeTrialMessages: number;
+  notice: AppNoticeConfig;
+}
+
 const STORAGE_PROFILES_KEY = 'BONDHU_APP_PROFILES_V2';
 const STORAGE_GREETINGS_KEY = 'BONDHU_APP_GREETINGS_V2';
 const STORAGE_SIGNUPS_KEY = 'BONDHU_USER_SIGNUPS_V2';
@@ -31,35 +50,32 @@ const STORAGE_INSTALLS_KEY = 'BONDHU_APP_INSTALLS_V2';
 const STORAGE_ADMIN_CRED_KEY = 'BONDHU_ADMIN_CREDENTIALS_V2';
 const STORAGE_ADMIN_SESSION_KEY = 'BONDHU_ADMIN_SESSION_ACTIVE';
 const STORAGE_LOCAL_UPDATED_AT_KEY = 'BONDHU_LOCAL_PROFILES_UPDATED_AT_V2';
+const STORAGE_APP_CONTROL_KEY = 'BONDHU_WEBAPP_CONTROL_V2';
 
 // Global Cloud Sync Endpoint for live real website updates
 export const API_SYNC_ENDPOINT = '/api/sync';
 export const GLOBAL_CLOUD_STORAGE_URL = 'https://extendsclass.com/api/json-storage/bin/ceaeeff';
 
-// Initial realistic signups seed if empty
-const INITIAL_SIGNUPS: UserSignupRecord[] = [
-  { id: 'usr_1', name: 'তানভীর আহমেদ', email: 'tanvir.ahmed@gmail.com', createdAt: new Date(Date.now() - 3600000 * 2).toISOString(), method: 'email', status: 'active', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Tanvir' },
-  { id: 'usr_2', name: 'রাকিবুল হাসান', email: 'rakibul.h@yahoo.com', createdAt: new Date(Date.now() - 3600000 * 5).toISOString(), method: 'google', status: 'active', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Rakib' },
-  { id: 'usr_3', name: 'মেহেদী হাসান শুভ', email: 'mehedi.shuvo@gmail.com', createdAt: new Date(Date.now() - 3600000 * 14).toISOString(), method: 'email', status: 'active', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Mehedi' },
-  { id: 'usr_4', name: 'সাব্বির হোসেন', email: 'sabbir23@gmail.com', createdAt: new Date(Date.now() - 3600000 * 28).toISOString(), method: 'email', status: 'active', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Sabbir' },
-  { id: 'usr_5', name: 'ফারহান চৌধুরী', email: 'farhan.chowdhury@hotmail.com', createdAt: new Date(Date.now() - 3600000 * 42).toISOString(), method: 'google', status: 'active', avatar: 'https://api.dicebear.com/7.x/adventurer/svg?seed=Farhan' }
-];
+// Initial signups & installs start completely clean (no fake seed accounts)
+const INITIAL_SIGNUPS: UserSignupRecord[] = [];
+const INITIAL_INSTALLS: AppInstallRecord[] = [];
 
-// Initial realistic installs seed if empty
-const INITIAL_INSTALLS: AppInstallRecord[] = [
-  { id: 'inst_1', timestamp: new Date(Date.now() - 3600000 * 1.5).toISOString(), platform: 'Android', source: 'PWA Install Prompt' },
-  { id: 'inst_2', timestamp: new Date(Date.now() - 3600000 * 4).toISOString(), platform: 'Android', source: 'Me Tab Download Button' },
-  { id: 'inst_3', timestamp: new Date(Date.now() - 3600000 * 9).toISOString(), platform: 'Windows', source: 'Browser Prompt' },
-  { id: 'inst_4', timestamp: new Date(Date.now() - 3600000 * 19).toISOString(), platform: 'Android', source: 'Direct Web App' },
-  { id: 'inst_5', timestamp: new Date(Date.now() - 3600000 * 26).toISOString(), platform: 'iOS', source: 'PWA Add to Homescreen' },
-  { id: 'inst_6', timestamp: new Date(Date.now() - 3600000 * 38).toISOString(), platform: 'Android', source: 'Me Tab Download Button' }
-];
+const DEFAULT_APP_CONTROL: WebAppControlConfig = {
+  maintenanceMode: false,
+  freeTrialMessages: 1,
+  notice: {
+    enabled: false,
+    text: '',
+    type: 'promo'
+  }
+};
 
 class AdminService {
   private profiles: Profile[] = [];
   private greetings: Record<string, string> = {};
   private signups: UserSignupRecord[] = [];
   private installs: AppInstallRecord[] = [];
+  private appControl: WebAppControlConfig = { ...DEFAULT_APP_CONTROL };
   private profileListeners: Array<(profiles: Profile[]) => void> = [];
   private statsListeners: Array<() => void> = [];
   private isCloudSyncing: boolean = false;
@@ -141,27 +157,48 @@ class AdminService {
     try {
       const storedSignups = localStorage.getItem(STORAGE_SIGNUPS_KEY);
       if (storedSignups) {
-        this.signups = JSON.parse(storedSignups);
+        const parsedSignups: UserSignupRecord[] = JSON.parse(storedSignups);
+        // Automatically filter out and delete any previous fake seed users
+        const fakeIds = new Set(['usr_1', 'usr_2', 'usr_3', 'usr_4', 'usr_5']);
+        const fakeNames = new Set(['তানভীর আহমেদ', 'রাকিবুল হাসান', 'মেহেদী হাসান শুভ', 'সাব্বির হোসেন', 'ফারহান চৌধুরী']);
+        this.signups = parsedSignups.filter(
+          (s) => !fakeIds.has(s.id) && !fakeNames.has(s.name) && !s.email.includes('user_')
+        );
+        localStorage.setItem(STORAGE_SIGNUPS_KEY, JSON.stringify(this.signups));
       } else {
-        this.signups = [...INITIAL_SIGNUPS];
+        this.signups = [];
         localStorage.setItem(STORAGE_SIGNUPS_KEY, JSON.stringify(this.signups));
       }
     } catch {
-      this.signups = [...INITIAL_SIGNUPS];
+      this.signups = [];
     }
 
     // 4. Load Installs
     try {
       const storedInstalls = localStorage.getItem(STORAGE_INSTALLS_KEY);
       if (storedInstalls) {
-        this.installs = JSON.parse(storedInstalls);
+        const parsedInstalls: AppInstallRecord[] = JSON.parse(storedInstalls);
+        // Automatically filter out any previous fake seed installs
+        const fakeInstallIds = new Set(['inst_1', 'inst_2', 'inst_3', 'inst_4', 'inst_5', 'inst_6']);
+        this.installs = parsedInstalls.filter(
+          (i) => !fakeInstallIds.has(i.id) && i.source !== 'Admin Test Simulator'
+        );
+        localStorage.setItem(STORAGE_INSTALLS_KEY, JSON.stringify(this.installs));
       } else {
-        this.installs = [...INITIAL_INSTALLS];
+        this.installs = [];
         localStorage.setItem(STORAGE_INSTALLS_KEY, JSON.stringify(this.installs));
       }
     } catch {
-      this.installs = [...INITIAL_INSTALLS];
+      this.installs = [];
     }
+
+    // 5. Load Web App Live Control Config
+    try {
+      const storedControl = localStorage.getItem(STORAGE_APP_CONTROL_KEY);
+      if (storedControl) {
+        this.appControl = { ...DEFAULT_APP_CONTROL, ...JSON.parse(storedControl) };
+      }
+    } catch {}
   }
 
   // ================= ADMIN CREDENTIALS =================
@@ -367,6 +404,15 @@ class AdminService {
         if (json.greetings && typeof json.greetings === 'object') {
           this.greetings = { ...this.greetings, ...json.greetings };
         }
+        if (json.appControl && typeof json.appControl === 'object') {
+          this.appControl = { ...this.appControl, ...json.appControl };
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem(STORAGE_APP_CONTROL_KEY, JSON.stringify(this.appControl));
+              window.dispatchEvent(new CustomEvent('bondhu-app-control-updated', { detail: this.appControl }));
+            } catch (_) {}
+          }
+        }
         if (json.updatedAt) {
           this.lastCloudSyncTime = json.updatedAt;
         }
@@ -394,7 +440,8 @@ class AdminService {
         version: 2,
         updatedAt: nowIso,
         profiles: this.profiles,
-        greetings: this.greetings
+        greetings: this.greetings,
+        appControl: this.appControl
       };
 
       let success = false;
@@ -516,28 +563,59 @@ class AdminService {
     return [...this.signups];
   }
 
-  public recordSignup(data: { name: string; email: string; method?: 'email' | 'google' | 'guest'; avatar?: string }): UserSignupRecord {
+  public recordSignup(data: {
+    id?: string;
+    name: string;
+    email: string;
+    method?: 'email' | 'google' | 'guest';
+    avatar?: string;
+    phone?: string;
+    credits?: number;
+    status?: 'active' | 'blocked';
+    isVerified?: boolean;
+    totalMessagesSent?: number;
+    platform?: string;
+  }): UserSignupRecord {
     // Avoid exact duplicate emails in the list
     const existingIndex = this.signups.findIndex(s => s.email.toLowerCase() === data.email.toLowerCase());
     if (existingIndex !== -1) {
-      const updated = {
+      const updated: UserSignupRecord = {
         ...this.signups[existingIndex],
         name: data.name || this.signups[existingIndex].name,
-        avatar: data.avatar || this.signups[existingIndex].avatar
+        avatar: data.avatar || this.signups[existingIndex].avatar,
+        phone: data.phone !== undefined ? data.phone : this.signups[existingIndex].phone,
+        credits: data.credits !== undefined ? data.credits : this.signups[existingIndex].credits,
+        lastActive: new Date().toISOString()
       };
       this.signups[existingIndex] = updated;
       this.notifyStats();
       return updated;
     }
 
+    let detectedPlatform = 'Web Browser';
+    if (typeof navigator !== 'undefined') {
+      const ua = navigator.userAgent;
+      if (/android/i.test(ua)) detectedPlatform = 'Android';
+      else if (/iPad|iPhone|iPod/.test(ua)) detectedPlatform = 'iOS';
+      else if (/windows/i.test(ua)) detectedPlatform = 'Windows PC';
+      else if (/macintosh|mac os x/i.test(ua)) detectedPlatform = 'macOS';
+    }
+
     const newRecord: UserSignupRecord = {
-      id: 'usr_' + Math.random().toString(36).substring(2, 9),
+      id: data.id || ('usr_' + Math.random().toString(36).substring(2, 9)),
       name: data.name.trim() || 'New User',
       email: data.email.trim().toLowerCase(),
       createdAt: new Date().toISOString(),
       method: data.method || 'email',
-      status: 'active',
-      avatar: data.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(data.name || data.email)}`
+      status: data.status || 'active',
+      avatar: data.avatar || `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(data.name || data.email)}`,
+      phone: data.phone || '',
+      credits: data.credits !== undefined ? data.credits : 5,
+      lastActive: new Date().toISOString(),
+      isVerified: data.isVerified !== undefined ? data.isVerified : data.method === 'google',
+      totalMessagesSent: data.totalMessagesSent || 0,
+      platform: data.platform || detectedPlatform,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined
     };
 
     this.signups.unshift(newRecord);
@@ -545,9 +623,107 @@ class AdminService {
     return newRecord;
   }
 
+  public updateUserSignup(id: string, updates: Partial<UserSignupRecord>): void {
+    const idx = this.signups.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      this.signups[idx] = {
+        ...this.signups[idx],
+        ...updates
+      };
+      this.notifyStats();
+    }
+  }
+
+  public toggleBlockUser(id: string): 'active' | 'blocked' {
+    const idx = this.signups.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      const nextStatus = this.signups[idx].status === 'blocked' ? 'active' : 'blocked';
+      this.signups[idx].status = nextStatus;
+      this.notifyStats();
+      return nextStatus;
+    }
+    return 'active';
+  }
+
+  public updateUserCredits(id: string, newCredits: number): void {
+    const idx = this.signups.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      this.signups[idx].credits = Math.max(0, newCredits);
+      this.notifyStats();
+    }
+  }
+
   public deleteSignup(id: string): void {
     this.signups = this.signups.filter(s => s.id !== id);
     this.notifyStats();
+  }
+
+  // Remove all fake seed profiles, dummy users, and test installs
+  public removeFakeProfiles(): { removedSignups: number; removedInstalls: number; removedProfiles: number } {
+    const prevSignupsCount = this.signups.length;
+    const prevInstallsCount = this.installs.length;
+    const prevProfilesCount = this.profiles.length;
+
+    // 1. Remove fake user signups (usr_1 through usr_5, dummy test users, etc.)
+    const fakeSignupIds = new Set(['usr_1', 'usr_2', 'usr_3', 'usr_4', 'usr_5']);
+    const fakeNames = new Set(['তানভীর আহমেদ', 'রাকিবুল হাসান', 'মেহেদী হাসান শুভ', 'সাব্বির হোসেন', 'ফারহান চৌধুরী']);
+    this.signups = this.signups.filter(
+      (s) => !fakeSignupIds.has(s.id) && !fakeNames.has(s.name) && !s.email.includes('user_')
+    );
+
+    // 2. Remove fake seed installs
+    const fakeInstallIds = new Set(['inst_1', 'inst_2', 'inst_3', 'inst_4', 'inst_5', 'inst_6']);
+    this.installs = this.installs.filter(
+      (i) => !fakeInstallIds.has(i.id) && i.source !== 'Admin Test Simulator'
+    );
+
+    // 3. Remove fake custom added chat profiles (keeping only the authentic 44 profiles)
+    const validProfileIds = new Set(ALL_PROFILES.map((p) => p.id));
+    this.profiles = this.profiles.filter((p) => validProfileIds.has(p.id));
+
+    this.notifyStats();
+    this.notifyProfiles();
+
+    return {
+      removedSignups: prevSignupsCount - this.signups.length,
+      removedInstalls: prevInstallsCount - this.installs.length,
+      removedProfiles: prevProfilesCount - this.profiles.length
+    };
+  }
+
+  // ================= WEB APP CONTROLS & LIVE SITE CONNECTION =================
+  public getAppControl(): WebAppControlConfig {
+    return {
+      ...this.appControl,
+      notice: { ...this.appControl.notice }
+    };
+  }
+
+  public updateAppControl(updates: Partial<WebAppControlConfig>): void {
+    this.appControl = {
+      ...this.appControl,
+      ...updates,
+      notice: {
+        ...this.appControl.notice,
+        ...(updates.notice || {})
+      }
+    };
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_APP_CONTROL_KEY, JSON.stringify(this.appControl));
+        window.dispatchEvent(new CustomEvent('bondhu-app-control-updated', { detail: this.appControl }));
+      } catch (_) {}
+    }
+    this.syncToCloud().catch(() => {});
+  }
+
+  public isUserBlocked(identifier: string): boolean {
+    if (!identifier) return false;
+    const clean = identifier.trim().toLowerCase();
+    const blockedRecord = this.signups.find(
+      s => (s.id.toLowerCase() === clean || s.email.toLowerCase() === clean) && s.status === 'blocked'
+    );
+    return !!blockedRecord;
   }
 
   public getInstalls(): AppInstallRecord[] {
