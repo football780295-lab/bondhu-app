@@ -649,10 +649,10 @@ const App: React.FC = () => {
       if (adminService.isAdminLoggedIn()) {
         // bypass limits
       }
-      // 1. Guest Mode: Allow 1 initial trial message, then prompt app download & sign in
-      else if (authUser.isGuest && !creditService.getIsInstalled()) {
+      // 1. Browser Trial: Allow 3 free trial messages, then show app download popup
+      else if (!creditService.checkIsStandalone() && !creditService.getIsInstalled()) {
         const guestMsgCount = creditService.getGuestMessageCount();
-        if (guestMsgCount >= 1) {
+        if (guestMsgCount >= 3) {
           setIsDownloadRequiredOpen(true);
           return false;
         }
@@ -884,66 +884,60 @@ const App: React.FC = () => {
       )}
 
       {/* Top Header */}
-      <div className="imo-blue px-3 py-2 text-white flex flex-col shadow-md shrink-0 z-20">
-        <div className="flex justify-between items-center gap-1.5">
+      <div className="imo-blue px-2 sm:px-3 py-1.5 text-white flex flex-col shadow-md shrink-0 z-20 max-w-full overflow-x-hidden">
+        <div className="flex justify-between items-center gap-1 w-full">
           {/* Left: Brand Logo & Unread Badge */}
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <img 
               src="/icon-192.png" 
               alt="Bondhu Logo" 
-              className="w-8 h-8 rounded-full bg-white object-contain shadow-xs border border-white/50 shrink-0" 
+              className="w-7 h-7 rounded-full bg-white object-contain shadow-xs border border-white/50 shrink-0" 
             />
-            <h1 className="text-xl font-extrabold tracking-tight leading-none">Bondhu</h1>
+            <h1 className="text-base sm:text-xl font-extrabold tracking-tight leading-none">Bondhu</h1>
             {totalUnreadCount > 0 ? (
-              <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+              <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full flex items-center gap-0.5 shadow-xs animate-pulse">
                 <span>{totalUnreadCount}</span>
               </span>
-            ) : (
-              <span className="bg-white/20 text-[10px] text-blue-100 px-1.5 py-0.5 rounded-full font-medium">
-                {filteredProfiles.length}
-              </span>
-            )}
+            ) : null}
           </div>
 
-          {/* Right: Actions Cluster (Zero Overlap Guaranteed) */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            {/* In-App Talking Credits & Watch 15s Ad Button */}
+          {/* Right: Actions Cluster (Perfect Mobile Responsive Fit) */}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* In-App Talking Credits Button */}
             <button 
               onClick={() => {
                 setAdModalReason('topup');
                 setIsVideoAdOpen(true);
               }}
-              className="bg-amber-400/20 hover:bg-amber-400/30 active:scale-95 text-amber-300 border border-amber-400/50 px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 cursor-pointer shrink-0 transition-all shadow-xs"
+              className="bg-amber-400/20 hover:bg-amber-400/30 active:scale-95 text-amber-300 border border-amber-400/50 px-1.5 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-0.5 cursor-pointer shrink-0 transition-all shadow-xs"
               title="১৫ সেকেন্ডের অ্যাড দেখে কথা বলার ফ্রি ক্রেডিট নিন"
             >
-              <i className="fas fa-coins text-amber-400 text-xs"></i>
+              <i className="fas fa-coins text-amber-400 text-[10px]"></i>
               <span>{userCredits}</span>
-              <span className="text-[9px] bg-amber-400 text-slate-900 px-1 rounded-full font-black leading-tight">+ফ্রি</span>
             </button>
 
             {/* Header Login / User */}
             {authUser.isGuest ? (
               <button 
                 onClick={() => setIsAuthModalOpen(true)}
-                className="bg-white/20 hover:bg-white/30 active:scale-95 text-white px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 transition-all border border-white/25 whitespace-nowrap shrink-0 cursor-pointer shadow-xs"
+                className="bg-white/20 hover:bg-white/30 active:scale-95 text-white px-2 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 transition-all border border-white/25 whitespace-nowrap shrink-0 cursor-pointer shadow-xs"
                 title="লগইন বা সাইন আপ করুন"
               >
-                <i className="fas fa-user-circle text-xs"></i>
+                <i className="fas fa-user-circle text-[10px]"></i>
                 <span>লগইন</span>
               </button>
             ) : (
               <button 
                 onClick={() => setBottomNav('me')}
-                className="bg-white/20 hover:bg-white/30 text-white pl-1 pr-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 border border-white/20"
+                className="bg-white/20 hover:bg-white/30 text-white pl-1 pr-1.5 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap shrink-0 border border-white/20"
                 title={authUser.displayName}
               >
                 {authUser.photoURL ? (
-                  <img src={authUser.photoURL} alt="user" className="w-5 h-5 rounded-full object-cover" />
+                  <img src={authUser.photoURL} alt="user" className="w-4 h-4 rounded-full object-cover" />
                 ) : (
-                  <i className="fas fa-user-check text-[10px] text-green-300"></i>
+                  <i className="fas fa-user-check text-[9px] text-green-300"></i>
                 )}
-                <span className="max-w-[50px] truncate">{authUser.displayName.split(' ')[0]}</span>
+                <span className="max-w-[40px] truncate text-[11px]">{authUser.displayName.split(' ')[0]}</span>
               </button>
             )}
 
@@ -951,38 +945,34 @@ const App: React.FC = () => {
             {!creditService.checkIsStandalone() && (
               <button 
                 onClick={handleDownloadClick}
-                className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 transition-all border border-emerald-400 shrink-0 cursor-pointer shadow-xs"
+                className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white px-2 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 transition-all border border-emerald-400 shrink-0 cursor-pointer shadow-xs"
                 title="অ্যাপ ডাউনলোড / ইনস্টল করুন"
               >
-                <i className="fas fa-download text-xs"></i>
-                <span className="text-[11px] font-bold">ডাউনলোড</span>
+                <i className="fas fa-download text-[10px]"></i>
+                <span className="text-[10px] font-bold">ডাউনলোড</span>
               </button>
             )}
 
-            {/* Mobile Notification Bar Bell Icon (Sleek, Non-intrusive) */}
+            {/* Mobile Notification Bar Bell Icon */}
             <button
               onClick={handleHeaderBellClick}
-              className={`w-7 h-7 rounded-full active:scale-95 flex items-center justify-center shrink-0 cursor-pointer text-xs transition-colors relative shadow-xs ${
+              className={`w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full active:scale-95 flex items-center justify-center shrink-0 cursor-pointer text-xs transition-colors relative shadow-xs ${
                 notifPermission === 'granted'
                   ? 'bg-white/25 text-emerald-300 border border-emerald-400/40 hover:bg-white/35'
                   : 'bg-white/15 hover:bg-white/25 text-white'
               }`}
-              title={
-                notifPermission === 'granted'
-                  ? 'মোবাইল নোটিফিকেশন চালু আছে (টেস্ট করতে ক্লিক করুন)'
-                  : 'মোবাইলের নোটিফিকেশন বার চালু করুন'
-              }
+              title="নোটিফিকেশন"
             >
-              <i className="fas fa-bell"></i>
+              <i className="fas fa-bell text-[11px]"></i>
               {notifPermission !== 'granted' && (
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-blue-600 animate-pulse"></span>
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 ring-1 ring-blue-600 animate-pulse"></span>
               )}
             </button>
 
             {/* Search Toggle */}
             <button 
               onClick={() => setIsSearchOpen(prev => !prev)} 
-              className={`w-7 h-7 rounded-full active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer text-xs transition-colors ${
+              className={`w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-full active:scale-95 text-white flex items-center justify-center shrink-0 cursor-pointer text-xs transition-colors ${
                 isSearchOpen ? 'bg-white text-blue-600' : 'bg-white/15 hover:bg-white/25'
               }`}
               aria-label="Search"
