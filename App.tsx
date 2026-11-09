@@ -649,8 +649,8 @@ const App: React.FC = () => {
       if (adminService.isAdminLoggedIn()) {
         // bypass limits
       }
-      // 1. Browser Trial: Allow 3 free trial messages, then show app download popup
-      else if (!creditService.checkIsStandalone() && !creditService.getIsInstalled()) {
+      // 1. Browser Trial: Allow 3 free trial messages on the website, then show app download popup
+      else if (!creditService.checkIsStandalone()) {
         const guestMsgCount = creditService.getGuestMessageCount();
         if (guestMsgCount >= 3) {
           setIsDownloadRequiredOpen(true);
