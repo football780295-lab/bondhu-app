@@ -5,7 +5,6 @@ import ChatWindow from './components/ChatWindow';
 import CallOverlay from './components/CallOverlay';
 import AuthModal from './components/AuthModal';
 import EditProfileModal from './components/EditProfileModal';
-import InstallAppModal from './components/InstallAppModal';
 import AdminPanel from './components/AdminPanel';
 import VideoAdModal, { AdModalReason } from './components/VideoAdModal';
 import DownloadRequiredModal from './components/DownloadRequiredModal';
@@ -155,9 +154,6 @@ const App: React.FC = () => {
   const [authUser, setAuthUser] = useState<AuthUser>(() => firebaseService.getCurrentUser());
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
-  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-  const [installModalAutoStart, setInstallModalAutoStart] = useState(false);
-  const [installModalSuccessOnly, setInstallModalSuccessOnly] = useState(false);
 
   // Credit & In-App Ads Monetization State
   const [userCredits, setUserCredits] = useState<number>(() => creditService.getCredits());
@@ -241,11 +237,24 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDownloadClick = () => {
+  const handleDownloadClick = async () => {
     adminService.recordInstall({ source: 'Download Click' });
-    setInstallModalSuccessOnly(false);
-    setInstallModalAutoStart(false);
-    setIsInstallModalOpen(true);
+    const promptEvent = (window as any).deferredInstallPrompt;
+    if (promptEvent) {
+      try {
+        await promptEvent.prompt();
+        const choice = await promptEvent.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          (window as any).deferredInstallPrompt = null;
+          creditService.setIsInstalled(true);
+          setIsAppInstalled(true);
+        }
+      } catch (err) {
+        console.warn('Install error:', err);
+      }
+    } else {
+      alert('অ্যাপটি ফোনে ইনস্টল করতে ব্রাউজারের উপরে ডানদিকের ৩-ডট (⋮) মেনু চাপুন এবং "Install app" অথবা "Add to Home screen" চাপুন।');
+    }
   };
 
   useEffect(() => {
@@ -293,18 +302,12 @@ const App: React.FC = () => {
         adminService.recordInstall({ source: 'PWA Web App Installed Event' });
         creditService.setIsInstalled(true);
         setIsAppInstalled(true);
-        setInstallModalAutoStart(false);
-        setInstallModalSuccessOnly(true);
-        setIsInstallModalOpen(true);
         notificationService.requestPermission();
       };
       window.addEventListener('appinstalled', handleAppInstalled);
 
       const handleCustomInstalled = () => {
         setIsAppInstalled(true);
-        setInstallModalAutoStart(false);
-        setInstallModalSuccessOnly(true);
-        setIsInstallModalOpen(true);
       };
       window.addEventListener('bondhu-app-installed', handleCustomInstalled);
 
@@ -747,22 +750,8 @@ const App: React.FC = () => {
           onDownloadAndLogin={() => {
             creditService.resetGuestCount();
             setIsDownloadRequiredOpen(false);
-            setInstallModalSuccessOnly(false);
-            setInstallModalAutoStart(false);
-            setIsInstallModalOpen(true);
+            handleDownloadClick();
           }}
-        />
-
-        {/* Install App Modal */}
-        <InstallAppModal
-          isOpen={isInstallModalOpen}
-          onClose={() => {
-            setIsInstallModalOpen(false);
-            setInstallModalAutoStart(false);
-            setInstallModalSuccessOnly(false);
-          }}
-          autoStart={installModalAutoStart}
-          isSuccessOnly={installModalSuccessOnly}
         />
 
         {/* Auth Modal for Login / Sign Up */}
@@ -958,14 +947,15 @@ const App: React.FC = () => {
               </button>
             )}
 
-            {/* App Download Button - Hidden when app is installed */}
-            {!isAppInstalled && (
+            {/* App Download Button in Header */}
+            {!creditService.checkIsStandalone() && (
               <button 
                 onClick={handleDownloadClick}
-                className="w-7 h-7 rounded-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white flex items-center justify-center shrink-0 shadow-xs border border-emerald-400 cursor-pointer"
+                className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 transition-all border border-emerald-400 shrink-0 cursor-pointer shadow-xs"
                 title="অ্যাপ ডাউনলোড / ইনস্টল করুন"
               >
                 <i className="fas fa-download text-xs"></i>
+                <span className="text-[11px] font-bold">ডাউনলোড</span>
               </button>
             )}
 
@@ -1238,7 +1228,7 @@ const App: React.FC = () => {
             </div>
 
             {/* App Download / Install Option - Hidden when app is installed */}
-            {!isAppInstalled && (
+            {!creditService.checkIsStandalone() && (
               <div 
                 onClick={handleDownloadClick}
                 className="p-4 flex items-center justify-between hover:bg-emerald-50/60 cursor-pointer transition-colors bg-gradient-to-r from-emerald-50/40 to-blue-50/40"
@@ -1516,18 +1506,6 @@ const App: React.FC = () => {
         currentUser={authUser}
       />
 
-      {/* Install App Modal */}
-      <InstallAppModal
-        isOpen={isInstallModalOpen}
-        onClose={() => {
-          setIsInstallModalOpen(false);
-          setInstallModalAutoStart(false);
-          setInstallModalSuccessOnly(false);
-        }}
-        autoStart={installModalAutoStart}
-        isSuccessOnly={installModalSuccessOnly}
-      />
-
       {/* 15-Second Rewarded Video Ad Modal (Same page, 15s countdown, rewards credits) */}
       <VideoAdModal
         isOpen={isVideoAdOpen}
@@ -1545,9 +1523,7 @@ const App: React.FC = () => {
         onDownloadAndLogin={() => {
           creditService.resetGuestCount();
           setIsDownloadRequiredOpen(false);
-          setInstallModalSuccessOnly(false);
-          setInstallModalAutoStart(false);
-          setIsInstallModalOpen(true);
+          handleDownloadClick();
         }}
       />
 
