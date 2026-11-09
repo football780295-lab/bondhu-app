@@ -244,7 +244,7 @@ const App: React.FC = () => {
   const handleDownloadClick = () => {
     adminService.recordInstall({ source: 'Download Click' });
     setInstallModalSuccessOnly(false);
-    setInstallModalAutoStart(true);
+    setInstallModalAutoStart(false);
     setIsInstallModalOpen(true);
   };
 
@@ -748,7 +748,7 @@ const App: React.FC = () => {
             creditService.resetGuestCount();
             setIsDownloadRequiredOpen(false);
             setInstallModalSuccessOnly(false);
-            setInstallModalAutoStart(true);
+            setInstallModalAutoStart(false);
             setIsInstallModalOpen(true);
           }}
         />
@@ -1546,7 +1546,7 @@ const App: React.FC = () => {
           creditService.resetGuestCount();
           setIsDownloadRequiredOpen(false);
           setInstallModalSuccessOnly(false);
-          setInstallModalAutoStart(true);
+          setInstallModalAutoStart(false);
           setIsInstallModalOpen(true);
         }}
       />
