@@ -267,6 +267,9 @@ const App: React.FC = () => {
       setAllProfiles(updated);
     });
 
+    // Fetch latest cloud profiles on app mount for every visitor
+    adminService.fetchCloudProfiles().catch(() => {});
+
     const handleWindowProfilesUpdated = (e: any) => {
       if (e.detail && Array.isArray(e.detail)) {
         setAllProfiles([...e.detail]);

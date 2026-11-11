@@ -84,6 +84,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     setInstalls(adminService.getInstalls());
     setProfiles(adminService.getProfiles());
 
+    // Auto-sync admin's custom profile images to cloud so all visitors receive them
+    adminService.syncToCloud().catch(() => {});
+
     const unsubProfiles = adminService.subscribeProfiles((updatedProfiles) => {
       setProfiles(updatedProfiles);
     });

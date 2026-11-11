@@ -54,7 +54,8 @@ const STORAGE_APP_CONTROL_KEY = 'BONDHU_WEBAPP_CONTROL_V2';
 
 // Global Cloud Sync Endpoint for live real website updates
 export const API_SYNC_ENDPOINT = '/api/sync';
-export const GLOBAL_CLOUD_STORAGE_URL = 'https://extendsclass.com/api/json-storage/bin/ceaeeff';
+export const FIREBASE_RTDB_URL = 'https://chating-app675849-default-rtdb.firebaseio.com/bondhu_data.json';
+export const KVDB_URL = 'https://kvdb.io/S2Vf15gY5mPZ9D8qN1kF9w/bondhu_profiles_v3';
 
 // Initial signups & installs start completely clean (no fake seed accounts)
 const INITIAL_SIGNUPS: UserSignupRecord[] = [];
@@ -333,22 +334,47 @@ class AdminService {
       try {
         const apiRes = await fetch(`${API_SYNC_ENDPOINT}?t=${Date.now()}`, {
           method: 'GET',
-          headers: { 'Accept': 'application/json' }
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(3500)
         });
         if (apiRes.ok) {
-          json = await apiRes.json();
+          const d = await apiRes.json();
+          if (d && Array.isArray(d.profiles) && d.profiles.length > 0) {
+            json = d;
+          }
         }
       } catch (_) {}
 
-      // 2. Fallback to direct cloud storage bin if API was not reachable
+      // 2. Direct fallback to Firebase RTDB if API was delayed
       if (!json || !Array.isArray(json.profiles) || json.profiles.length === 0) {
         try {
-          const directRes = await fetch(`${GLOBAL_CLOUD_STORAGE_URL}?t=${Date.now()}`, {
+          const directFbRes = await fetch(`${FIREBASE_RTDB_URL}?t=${Date.now()}`, {
             method: 'GET',
-            headers: { 'Accept': 'application/json' }
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(3500)
           });
-          if (directRes.ok) {
-            json = await directRes.json();
+          if (directFbRes.ok) {
+            const d = await directFbRes.json();
+            if (d && Array.isArray(d.profiles) && d.profiles.length > 0) {
+              json = d;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 3. Direct fallback to KVDB
+      if (!json || !Array.isArray(json.profiles) || json.profiles.length === 0) {
+        try {
+          const directKvRes = await fetch(`${KVDB_URL}?t=${Date.now()}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(3500)
+          });
+          if (directKvRes.ok) {
+            const d = await directKvRes.json();
+            if (d && Array.isArray(d.profiles) && d.profiles.length > 0) {
+              json = d;
+            }
           }
         } catch (_) {}
       }
@@ -446,33 +472,33 @@ class AdminService {
 
       let success = false;
 
-      // 1. Send to /api/sync endpoint (works seamlessly on Vercel & localhost)
-      try {
-        const res = await fetch(API_SYNC_ENDPOINT, {
+      // Send to /api/sync, Firebase RTDB, and KVDB in parallel
+      const syncTargets = [
+        // Target 1: /api/sync endpoint
+        fetch(API_SYNC_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-          const resJson = await res.json().catch(() => ({}));
-          if (resJson && resJson.success !== false) {
-            success = true;
-          }
-        }
-      } catch (_) {}
+        }).then(r => r.ok).catch(() => false),
 
-      // 2. Fallback to direct cloud storage PUT if needed
-      if (!success) {
-        try {
-          const directRes = await fetch(GLOBAL_CLOUD_STORAGE_URL, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'text/plain' },
-            body: JSON.stringify(payload)
-          });
-          if (directRes.ok) {
-            success = true;
-          }
-        } catch (_) {}
+        // Target 2: Firebase Realtime Database direct
+        fetch(FIREBASE_RTDB_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.ok).catch(() => false),
+
+        // Target 3: KVDB Persistent cloud storage direct
+        fetch(KVDB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.ok).catch(() => false)
+      ];
+
+      const results = await Promise.allSettled(syncTargets);
+      if (results.some(r => r.status === 'fulfilled' && r.value === true)) {
+        success = true;
       }
 
       this.isCloudSyncing = false;

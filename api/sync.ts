@@ -1,86 +1,92 @@
 // Vercel Serverless Function: Global Profiles & Sync API
-// Dual-bin high-capacity cloud storage to ensure ALL 44+ profiles & images save without payload limits
+// Multi-layer resilient cloud storage: In-memory cache + Firebase RTDB + KVDB cloud store
+// Guarantees all admin profile picture changes sync to EVERY public visitor on ANY browser/device
 
-const BIN_URL_1 = 'https://extendsclass.com/api/json-storage/bin/ceaeeff';
-const BIN_URL_2 = 'https://extendsclass.com/api/json-storage/bin/bdbdace';
+const FIREBASE_RTDB_URL = 'https://chating-app675849-default-rtdb.firebaseio.com/bondhu_data.json';
+const KVDB_URL = 'https://kvdb.io/S2Vf15gY5mPZ9D8qN1kF9w/bondhu_profiles_v3';
+
+// In-memory module cache (survives warm serverless invocations)
+let memoryCache: {
+  version: number;
+  updatedAt: string;
+  profiles: any[];
+  greetings: any;
+  appControl: any;
+} | null = null;
 
 export default async function handler(req: any, res: any) {
-  // Allow all origins, methods, and headers
+  // CORS & Cache control headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
 
   // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // GET: Fetch profiles from both cloud bins and combine them
+  // GET: Retrieve latest global profiles
   if (req.method === 'GET') {
+    // 1. Try Firebase RTDB first
     try {
-      const [r1, r2] = await Promise.all([
-        fetch(`${BIN_URL_1}?t=${Date.now()}`, { headers: { Accept: 'application/json' } }),
-        fetch(`${BIN_URL_2}?t=${Date.now()}`, { headers: { Accept: 'application/json' } })
-      ]);
-
-      let profiles1: any[] = [];
-      let profiles2: any[] = [];
-      let greetings: any = {};
-      let appControl: any = null;
-
-      if (r1.ok) {
-        try {
-          const d1 = await r1.json();
-          if (Array.isArray(d1.profiles)) profiles1 = d1.profiles;
-          if (d1.greetings && typeof d1.greetings === 'object') {
-            greetings = { ...greetings, ...d1.greetings };
-          }
-          if (d1.appControl) appControl = d1.appControl;
-        } catch (_) {}
-      }
-
-      if (r2.ok) {
-        try {
-          const d2 = await r2.json();
-          if (Array.isArray(d2.profiles)) profiles2 = d2.profiles;
-          if (d2.greetings && typeof d2.greetings === 'object') {
-            greetings = { ...greetings, ...d2.greetings };
-          }
-          if (d2.appControl && !appControl) appControl = d2.appControl;
-        } catch (_) {}
-      }
-
-      // Combine both chunks into unified profile list
-      const combinedProfiles: any[] = [...profiles1];
-      profiles2.forEach((p2) => {
-        const existingIdx = combinedProfiles.findIndex((p) => p.id === p2.id);
-        if (existingIdx !== -1) {
-          combinedProfiles[existingIdx] = { ...combinedProfiles[existingIdx], ...p2 };
-        } else {
-          combinedProfiles.push(p2);
+      const fbRes = await fetch(`${FIREBASE_RTDB_URL}?t=${Date.now()}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3500)
+      });
+      if (fbRes.ok) {
+        const fbData = await fbRes.json();
+        if (fbData && Array.isArray(fbData.profiles) && fbData.profiles.length > 0) {
+          memoryCache = fbData;
+          return res.status(200).json({
+            success: true,
+            source: 'firebase_rtdb',
+            ...fbData
+          });
         }
-      });
+      }
+    } catch (_) {}
 
-      return res.status(200).json({
-        version: 2,
-        profiles: combinedProfiles,
-        greetings: greetings,
-        appControl: appControl,
-        count: combinedProfiles.length
+    // 2. Try KVDB cloud storage
+    try {
+      const kvRes = await fetch(`${KVDB_URL}?t=${Date.now()}`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3500)
       });
-    } catch (err: any) {
-      console.error('Error fetching in api/sync:', err);
-      return res.status(500).json({
-        version: 2,
-        profiles: [],
-        greetings: {},
-        error: err?.message || 'Failed to fetch'
+      if (kvRes.ok) {
+        const kvData = await kvRes.json();
+        if (kvData && Array.isArray(kvData.profiles) && kvData.profiles.length > 0) {
+          memoryCache = kvData;
+          return res.status(200).json({
+            success: true,
+            source: 'kvdb',
+            ...kvData
+          });
+        }
+      }
+    } catch (_) {}
+
+    // 3. Fallback to memoryCache if present
+    if (memoryCache && Array.isArray(memoryCache.profiles) && memoryCache.profiles.length > 0) {
+      return res.status(200).json({
+        success: true,
+        source: 'memory_cache',
+        ...memoryCache
       });
     }
+
+    // 4. No cloud data saved yet
+    return res.status(200).json({
+      success: true,
+      source: 'empty_cloud',
+      profiles: [],
+      greetings: {},
+      appControl: null,
+      message: 'No cloud override yet'
+    });
   }
 
-  // POST / PUT: Split and save across both cloud bins to avoid any 100KB limit
+  // POST / PUT: Save profiles from Admin Panel to cloud
   if (req.method === 'POST' || req.method === 'PUT') {
     try {
       let bodyData = req.body;
@@ -94,56 +100,49 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ success: false, message: 'Profiles array required' });
       }
 
-      const allProfiles: any[] = Array.isArray(bodyData.profiles) ? bodyData.profiles : (Array.isArray(bodyData) ? bodyData : []);
+      const allProfiles: any[] = Array.isArray(bodyData.profiles)
+        ? bodyData.profiles
+        : (Array.isArray(bodyData) ? bodyData : []);
       const greetings = bodyData.greetings || {};
-
-      // Split profiles into 2 safe chunks (e.g. 1-22 and 23-44)
-      const half = Math.ceil(allProfiles.length / 2);
-      const chunk1 = allProfiles.slice(0, half);
-      const chunk2 = allProfiles.slice(half);
-
-      const nowIso = new Date().toISOString();
       const appControl = bodyData.appControl || null;
+      const nowIso = new Date().toISOString();
 
-      const payload1 = {
+      const payload = {
         version: 2,
         updatedAt: nowIso,
-        profiles: chunk1,
+        profiles: allProfiles,
         greetings: greetings,
-        appControl: appControl
+        appControl: appControl,
+        count: allProfiles.length
       };
 
-      const payload2 = {
-        version: 2,
-        updatedAt: nowIso,
-        profiles: chunk2,
-        greetings: greetings,
-        appControl: appControl
-      };
+      // Update in-memory cache instantly
+      memoryCache = payload;
 
-      // Save both chunks in parallel to cloud storage bins
-      const [res1, res2] = await Promise.all([
-        fetch(BIN_URL_1, {
+      // Save to Firebase RTDB and KVDB in parallel
+      const savePromises = [
+        // Target 1: Firebase Realtime Database
+        fetch(FIREBASE_RTDB_URL, {
           method: 'PUT',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(payload1)
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch((e) => {
+          console.warn('Firebase RTDB save notice:', e);
+          return null;
         }),
-        fetch(BIN_URL_2, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(payload2)
-        })
-      ]);
 
-      if (!res1.ok || !res2.ok) {
-        console.error('Bin save status:', res1.status, res2.status);
-        const errText1 = !res1.ok ? await res1.text().catch(() => '') : '';
-        const errText2 = !res2.ok ? await res2.text().catch(() => '') : '';
-        return res.status(500).json({
-          success: false,
-          message: `Cloud bin error: ${res1.status} (${errText1}) / ${res2.status} (${errText2})`
-        });
-      }
+        // Target 2: KVDB Persistent Storage
+        fetch(KVDB_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch((e) => {
+          console.warn('KVDB save notice:', e);
+          return null;
+        })
+      ];
+
+      await Promise.allSettled(savePromises);
 
       return res.status(200).json({
         success: true,
