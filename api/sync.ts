@@ -1,163 +1,135 @@
 // Vercel Serverless Function: Global Profiles & Sync API
-// Multi-layer resilient cloud storage: In-memory cache + Firebase RTDB + KVDB cloud store
-// Guarantees all admin profile picture changes sync to EVERY public visitor on ANY browser/device
+// Uses native Vercel Blob (OIDC) for persistent global storage so admin profile changes
+// sync immediately to EVERY public visitor on ANY browser or device.
 
-const FIREBASE_RTDB_URL = 'https://chating-app675849-default-rtdb.firebaseio.com/bondhu_data.json';
-const KVDB_URL = 'https://kvdb.io/S2Vf15gY5mPZ9D8qN1kF9w/bondhu_profiles_v3';
+import { put, list } from '@vercel/blob';
 
-// In-memory module cache (survives warm serverless invocations)
-let memoryCache: {
-  version: number;
-  updatedAt: string;
+const BLOB_PATHNAME = 'bondhu-profiles.json';
+const BLOB_PUBLIC_URL = 'https://3hgb5rcqc0evcddn.public.blob.vercel-storage.com/bondhu-profiles.json';
+
+interface SyncPayload {
   profiles: any[];
-  greetings: any;
-  appControl: any;
-} | null = null;
+  updatedAt: number;
+  syncedAt?: string;
+}
 
-export default async function handler(req: any, res: any) {
-  // CORS & Cache control headers
+// Warm-instance in-memory cache as a fast fallback
+let memoryCache: SyncPayload | null = null;
+
+function setNoCacheAndCorsHeaders(res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+}
 
-  // Handle preflight
+async function readFromBlob(): Promise<SyncPayload | null> {
+  // 1. Direct fetch from deterministic public Blob URL with cache-busting
+  try {
+    const res = await fetch(`${BLOB_PUBLIC_URL}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && Array.isArray(data.profiles)) {
+        return data as SyncPayload;
+      }
+    }
+  } catch {
+    // Fall through to list() lookup
+  }
+
+  // 2. Fallback: lookup via Vercel Blob list()
+  try {
+    const { blobs } = await list({ prefix: BLOB_PATHNAME, limit: 1 });
+    if (blobs.length > 0) {
+      const res = await fetch(`${blobs[0].url}?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.profiles)) {
+          return data as SyncPayload;
+        }
+      }
+    }
+  } catch {
+    // Ignore and fall back to memoryCache
+  }
+
+  return null;
+}
+
+export default async function handler(req: any, res: any) {
+  setNoCacheAndCorsHeaders(res);
+
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
 
-  // GET: Retrieve latest global profiles
   if (req.method === 'GET') {
-    // 1. Try Firebase RTDB first
-    try {
-      const fbRes = await fetch(`${FIREBASE_RTDB_URL}?t=${Date.now()}`, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(3500)
-      });
-      if (fbRes.ok) {
-        const fbData = await fbRes.json();
-        if (fbData && Array.isArray(fbData.profiles) && fbData.profiles.length > 0) {
-          memoryCache = fbData;
-          return res.status(200).json({
-            success: true,
-            source: 'firebase_rtdb',
-            ...fbData
-          });
-        }
-      }
-    } catch (_) {}
+    const blobData = await readFromBlob();
 
-    // 2. Try KVDB cloud storage
-    try {
-      const kvRes = await fetch(`${KVDB_URL}?t=${Date.now()}`, {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(3500)
-      });
-      if (kvRes.ok) {
-        const kvData = await kvRes.json();
-        if (kvData && Array.isArray(kvData.profiles) && kvData.profiles.length > 0) {
-          memoryCache = kvData;
-          return res.status(200).json({
-            success: true,
-            source: 'kvdb',
-            ...kvData
-          });
-        }
+    if (blobData && blobData.profiles.length > 0) {
+      if (!memoryCache || (blobData.updatedAt || 0) >= (memoryCache.updatedAt || 0)) {
+        memoryCache = blobData;
       }
-    } catch (_) {}
-
-    // 3. Fallback to memoryCache if present
-    if (memoryCache && Array.isArray(memoryCache.profiles) && memoryCache.profiles.length > 0) {
-      return res.status(200).json({
-        success: true,
-        source: 'memory_cache',
-        ...memoryCache
-      });
+      return res.status(200).json({ ...blobData, source: 'vercel-blob' });
     }
 
-    // 4. No cloud data saved yet
+    if (memoryCache && memoryCache.profiles.length > 0) {
+      return res.status(200).json({ ...memoryCache, source: 'memory-cache' });
+    }
+
     return res.status(200).json({
-      success: true,
-      source: 'empty_cloud',
-      profiles: [],
-      greetings: {},
-      appControl: null,
-      message: 'No cloud override yet'
+      profiles: blobData?.profiles || [],
+      updatedAt: blobData?.updatedAt || 0,
+      source: blobData ? 'vercel-blob-empty' : 'empty',
     });
   }
 
-  // POST / PUT: Save profiles from Admin Panel to cloud
   if (req.method === 'POST' || req.method === 'PUT') {
     try {
-      let bodyData = req.body;
-      if (typeof bodyData === 'string') {
-        try {
-          bodyData = JSON.parse(bodyData);
-        } catch (_) {}
+      const rawBody = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      if (!rawBody || !Array.isArray(rawBody.profiles)) {
+        return res.status(400).json({ success: false, error: 'Invalid payload: profiles array is required' });
       }
 
-      if (!bodyData || (!bodyData.profiles && !Array.isArray(bodyData))) {
-        return res.status(400).json({ success: false, message: 'Profiles array required' });
-      }
-
-      const allProfiles: any[] = Array.isArray(bodyData.profiles)
-        ? bodyData.profiles
-        : (Array.isArray(bodyData) ? bodyData : []);
-      const greetings = bodyData.greetings || {};
-      const appControl = bodyData.appControl || null;
-      const nowIso = new Date().toISOString();
-
-      const payload = {
-        version: 2,
-        updatedAt: nowIso,
-        profiles: allProfiles,
-        greetings: greetings,
-        appControl: appControl,
-        count: allProfiles.length
+      const payload: SyncPayload = {
+        profiles: rawBody.profiles,
+        updatedAt: typeof rawBody.updatedAt === 'number' ? rawBody.updatedAt : Date.now(),
+        syncedAt: new Date().toISOString(),
       };
 
-      // Update in-memory cache instantly
+      const blob = await put(BLOB_PATHNAME, JSON.stringify(payload), {
+        access: 'public',
+        allowOverwrite: true,
+        addRandomSuffix: false,
+        cacheControlMaxAge: 0,
+        contentType: 'application/json',
+      });
+
       memoryCache = payload;
-
-      // Save to Firebase RTDB and KVDB in parallel
-      const savePromises = [
-        // Target 1: Firebase Realtime Database
-        fetch(FIREBASE_RTDB_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }).catch((e) => {
-          console.warn('Firebase RTDB save notice:', e);
-          return null;
-        }),
-
-        // Target 2: KVDB Persistent Storage
-        fetch(KVDB_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }).catch((e) => {
-          console.warn('KVDB save notice:', e);
-          return null;
-        })
-      ];
-
-      await Promise.allSettled(savePromises);
 
       return res.status(200).json({
         success: true,
-        message: 'সকল প্রোফাইল ও ছবি সফলভাবে ক্লাউডে সেভ হয়েছে!',
-        updatedAt: nowIso,
-        count: allProfiles.length
+        count: payload.profiles.length,
+        updatedAt: payload.updatedAt,
+        url: blob.url,
       });
     } catch (err: any) {
-      console.error('Error saving in api/sync:', err);
+      console.error('Vercel Blob sync error:', err);
       return res.status(500).json({
         success: false,
-        message: err?.message || 'Failed to save to cloud storage'
+        error: err?.message || 'Failed to save profiles to Vercel Blob',
       });
     }
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  return res.status(405).json({ success: false, error: 'Method not allowed' });
 }

@@ -54,8 +54,7 @@ const STORAGE_APP_CONTROL_KEY = 'BONDHU_WEBAPP_CONTROL_V2';
 
 // Global Cloud Sync Endpoint for live real website updates
 export const API_SYNC_ENDPOINT = '/api/sync';
-export const FIREBASE_RTDB_URL = 'https://chating-app675849-default-rtdb.firebaseio.com/bondhu_data.json';
-export const KVDB_URL = 'https://kvdb.io/S2Vf15gY5mPZ9D8qN1kF9w/bondhu_profiles_v3';
+export const BLOB_PUBLIC_URL = 'https://3hgb5rcqc0evcddn.public.blob.vercel-storage.com/bondhu-profiles.json';
 
 // Initial signups & installs start completely clean (no fake seed accounts)
 const INITIAL_SIGNUPS: UserSignupRecord[] = [];
@@ -334,8 +333,9 @@ class AdminService {
       try {
         const apiRes = await fetch(`${API_SYNC_ENDPOINT}?t=${Date.now()}`, {
           method: 'GET',
+          cache: 'no-store',
           headers: { 'Accept': 'application/json' },
-          signal: AbortSignal.timeout(3500)
+          signal: AbortSignal.timeout(5000)
         });
         if (apiRes.ok) {
           const d = await apiRes.json();
@@ -345,33 +345,17 @@ class AdminService {
         }
       } catch (_) {}
 
-      // 2. Direct fallback to Firebase RTDB if API was delayed
+      // 2. Direct fallback to public Vercel Blob CDN URL if /api/sync was delayed
       if (!json || !Array.isArray(json.profiles) || json.profiles.length === 0) {
         try {
-          const directFbRes = await fetch(`${FIREBASE_RTDB_URL}?t=${Date.now()}`, {
+          const directBlobRes = await fetch(`${BLOB_PUBLIC_URL}?t=${Date.now()}`, {
             method: 'GET',
+            cache: 'no-store',
             headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(3500)
+            signal: AbortSignal.timeout(5000)
           });
-          if (directFbRes.ok) {
-            const d = await directFbRes.json();
-            if (d && Array.isArray(d.profiles) && d.profiles.length > 0) {
-              json = d;
-            }
-          }
-        } catch (_) {}
-      }
-
-      // 3. Direct fallback to KVDB
-      if (!json || !Array.isArray(json.profiles) || json.profiles.length === 0) {
-        try {
-          const directKvRes = await fetch(`${KVDB_URL}?t=${Date.now()}`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(3500)
-          });
-          if (directKvRes.ok) {
-            const d = await directKvRes.json();
+          if (directBlobRes.ok) {
+            const d = await directBlobRes.json();
             if (d && Array.isArray(d.profiles) && d.profiles.length > 0) {
               json = d;
             }
@@ -472,33 +456,21 @@ class AdminService {
 
       let success = false;
 
-      // Send to /api/sync, Firebase RTDB, and KVDB in parallel
-      const syncTargets = [
-        // Target 1: /api/sync endpoint
-        fetch(API_SYNC_ENDPOINT, {
+      // Save to /api/sync (backed by persistent Vercel Blob)
+      try {
+        const res = await fetch(API_SYNC_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
-        }).then(r => r.ok).catch(() => false),
-
-        // Target 2: Firebase Realtime Database direct
-        fetch(FIREBASE_RTDB_URL, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }).then(r => r.ok).catch(() => false),
-
-        // Target 3: KVDB Persistent cloud storage direct
-        fetch(KVDB_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }).then(r => r.ok).catch(() => false)
-      ];
-
-      const results = await Promise.allSettled(syncTargets);
-      if (results.some(r => r.status === 'fulfilled' && r.value === true)) {
-        success = true;
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success === true) {
+            success = true;
+          }
+        }
+      } catch (_) {
+        success = false;
       }
 
       this.isCloudSyncing = false;
