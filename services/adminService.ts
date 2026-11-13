@@ -51,10 +51,21 @@ const STORAGE_ADMIN_CRED_KEY = 'BONDHU_ADMIN_CREDENTIALS_V2';
 const STORAGE_ADMIN_SESSION_KEY = 'BONDHU_ADMIN_SESSION_ACTIVE';
 const STORAGE_LOCAL_UPDATED_AT_KEY = 'BONDHU_LOCAL_PROFILES_UPDATED_AT_V2';
 const STORAGE_APP_CONTROL_KEY = 'BONDHU_WEBAPP_CONTROL_V2';
+const STORAGE_VISITOR_ID_KEY = 'BONDHU_VISITOR_ID_V1';
+const SESSION_VISIT_TRACKED_KEY = 'BONDHU_VISIT_TRACKED_SESSION';
+
+export interface VisitStats {
+  totalVisits: number;
+  todayVisits: number;
+  uniqueVisitors: number;
+  adsWatched: number;
+}
 
 // Global Cloud Sync Endpoint for live real website updates
 export const API_SYNC_ENDPOINT = '/api/sync';
+export const API_ANALYTICS_ENDPOINT = '/api/analytics';
 export const BLOB_PUBLIC_URL = 'https://3hgb5rcqc0evcddn.public.blob.vercel-storage.com/bondhu-profiles.json';
+export const BLOB_ANALYTICS_PUBLIC_URL = 'https://3hgb5rcqc0evcddn.public.blob.vercel-storage.com/bondhu-analytics.json';
 
 // Initial signups & installs start completely clean (no fake seed accounts)
 const INITIAL_SIGNUPS: UserSignupRecord[] = [];
@@ -75,6 +86,8 @@ class AdminService {
   private greetings: Record<string, string> = {};
   private signups: UserSignupRecord[] = [];
   private installs: AppInstallRecord[] = [];
+  private visitStats: VisitStats = { totalVisits: 0, todayVisits: 0, uniqueVisitors: 0, adsWatched: 0 };
+  private visitTrackedInMemory: boolean = false;
   private appControl: WebAppControlConfig = { ...DEFAULT_APP_CONTROL };
   private profileListeners: Array<(profiles: Profile[]) => void> = [];
   private statsListeners: Array<() => void> = [];
@@ -557,6 +570,119 @@ class AdminService {
   }
 
   // ================= STATS & ANALYTICS =================
+  public getVisitStats(): VisitStats {
+    return { ...this.visitStats };
+  }
+
+  private async postAnalyticsEvent(body: any): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      const res = await fetch(API_ANALYTICS_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        keepalive: true,
+        body: JSON.stringify(body),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        if (d && d.success) {
+          this.visitStats = {
+            totalVisits: typeof d.totalVisits === 'number' ? d.totalVisits : this.visitStats.totalVisits,
+            todayVisits: typeof d.todayVisits === 'number' ? d.todayVisits : this.visitStats.todayVisits,
+            uniqueVisitors: typeof d.uniqueVisitors === 'number' ? d.uniqueVisitors : this.visitStats.uniqueVisitors,
+            adsWatched: typeof d.adsWatched === 'number' ? d.adsWatched : this.visitStats.adsWatched,
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  public trackVisit(): void {
+    if (typeof window === 'undefined') return;
+    if (this.visitTrackedInMemory) return;
+    try {
+      if (sessionStorage.getItem(SESSION_VISIT_TRACKED_KEY) === '1') {
+        this.visitTrackedInMemory = true;
+        return;
+      }
+      this.visitTrackedInMemory = true;
+      sessionStorage.setItem(SESSION_VISIT_TRACKED_KEY, '1');
+
+      let visitorId = localStorage.getItem(STORAGE_VISITOR_ID_KEY);
+      if (!visitorId) {
+        visitorId = 'v_' + Math.random().toString(36).substring(2, 11) + '_' + Date.now().toString(36);
+        localStorage.setItem(STORAGE_VISITOR_ID_KEY, visitorId);
+      }
+
+      this.postAnalyticsEvent({ type: 'visit', visitorId }).catch(() => {});
+    } catch (_) {}
+  }
+
+  public recordAdWatch(): void {
+    this.visitStats.adsWatched += 1;
+    this.postAnalyticsEvent({ type: 'ad' }).catch(() => {});
+  }
+
+  public async fetchCloudAnalytics(): Promise<boolean> {
+    try {
+      let d: any = null;
+      try {
+        const res = await fetch(`${API_ANALYTICS_ENDPOINT}?t=${Date.now()}`, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(5000),
+        });
+        if (res.ok) {
+          d = await res.json();
+        }
+      } catch (_) {}
+
+      if (!d) {
+        try {
+          const blobRes = await fetch(`${BLOB_ANALYTICS_PUBLIC_URL}?t=${Date.now()}`, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: { Accept: 'application/json' },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (blobRes.ok) {
+            const raw = await blobRes.json();
+            const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+            d = {
+              totalVisits: raw.totalVisits || 0,
+              todayVisits: raw.dailyVisits?.[todayKey] || 0,
+              uniqueVisitors: Array.isArray(raw.uniqueVisitorIds) ? raw.uniqueVisitorIds.length : 0,
+              adsWatched: raw.adsWatched || 0,
+              signups: raw.signups || [],
+              installs: raw.installs || [],
+            };
+          }
+        } catch (_) {}
+      }
+
+      if (d) {
+        this.visitStats = {
+          totalVisits: typeof d.totalVisits === 'number' ? d.totalVisits : this.visitStats.totalVisits,
+          todayVisits: typeof d.todayVisits === 'number' ? d.todayVisits : this.visitStats.todayVisits,
+          uniqueVisitors: typeof d.uniqueVisitors === 'number' ? d.uniqueVisitors : this.visitStats.uniqueVisitors,
+          adsWatched: typeof d.adsWatched === 'number' ? d.adsWatched : this.visitStats.adsWatched,
+        };
+        if (Array.isArray(d.signups)) {
+          this.signups = d.signups;
+        }
+        if (Array.isArray(d.installs)) {
+          this.installs = d.installs;
+        }
+        this.notifyStats();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   public getSignups(): UserSignupRecord[] {
     return [...this.signups];
   }
@@ -587,6 +713,7 @@ class AdminService {
       };
       this.signups[existingIndex] = updated;
       this.notifyStats();
+      this.postAnalyticsEvent({ type: 'signup', record: updated }).catch(() => {});
       return updated;
     }
 
@@ -618,6 +745,7 @@ class AdminService {
 
     this.signups.unshift(newRecord);
     this.notifyStats();
+    this.postAnalyticsEvent({ type: 'signup', record: newRecord }).catch(() => {});
     return newRecord;
   }
 
@@ -629,6 +757,7 @@ class AdminService {
         ...updates
       };
       this.notifyStats();
+      this.postAnalyticsEvent({ type: 'update_signup', id, updates }).catch(() => {});
     }
   }
 
@@ -638,6 +767,7 @@ class AdminService {
       const nextStatus = this.signups[idx].status === 'blocked' ? 'active' : 'blocked';
       this.signups[idx].status = nextStatus;
       this.notifyStats();
+      this.postAnalyticsEvent({ type: 'update_signup', id, updates: { status: nextStatus } }).catch(() => {});
       return nextStatus;
     }
     return 'active';
@@ -646,14 +776,17 @@ class AdminService {
   public updateUserCredits(id: string, newCredits: number): void {
     const idx = this.signups.findIndex(s => s.id === id);
     if (idx !== -1) {
-      this.signups[idx].credits = Math.max(0, newCredits);
+      const nextCredits = Math.max(0, newCredits);
+      this.signups[idx].credits = nextCredits;
       this.notifyStats();
+      this.postAnalyticsEvent({ type: 'update_signup', id, updates: { credits: nextCredits } }).catch(() => {});
     }
   }
 
   public deleteSignup(id: string): void {
     this.signups = this.signups.filter(s => s.id !== id);
     this.notifyStats();
+    this.postAnalyticsEvent({ type: 'delete_signup', id }).catch(() => {});
   }
 
   // Remove all fake seed profiles, dummy users, and test installs
@@ -748,12 +881,14 @@ class AdminService {
 
     this.installs.unshift(newInstall);
     this.notifyStats();
+    this.postAnalyticsEvent({ type: 'install', record: newInstall }).catch(() => {});
     return newInstall;
   }
 
   public deleteInstall(id: string): void {
     this.installs = this.installs.filter(i => i.id !== id);
     this.notifyStats();
+    this.postAnalyticsEvent({ type: 'delete_install', id }).catch(() => {});
   }
 
   public subscribeStats(callback: () => void): () => void {
@@ -774,7 +909,9 @@ class AdminService {
   public resetStats(): void {
     this.signups = [...INITIAL_SIGNUPS];
     this.installs = [...INITIAL_INSTALLS];
+    this.visitStats = { totalVisits: 0, todayVisits: 0, uniqueVisitors: 0, adsWatched: 0 };
     this.notifyStats();
+    this.postAnalyticsEvent({ type: 'reset' }).catch(() => {});
   }
 }
 

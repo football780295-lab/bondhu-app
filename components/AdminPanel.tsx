@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Profile } from '../types';
-import { adminService, UserSignupRecord, AppInstallRecord } from '../services/adminService';
+import { adminService, UserSignupRecord, AppInstallRecord, VisitStats } from '../services/adminService';
 import { creditService } from '../services/creditService';
 import { notificationService } from '../services/notificationService';
 import VideoAdModal from './VideoAdModal';
@@ -34,7 +34,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
   const [profiles, setProfiles] = useState<Profile[]>(() => adminService.getProfiles());
   const [signups, setSignups] = useState<UserSignupRecord[]>(() => adminService.getSignups());
   const [installs, setInstalls] = useState<AppInstallRecord[]>(() => adminService.getInstalls());
-  const [adsWatched, setAdsWatched] = useState<number>(() => creditService.getTotalAdsWatched());
+  const [visitStats, setVisitStats] = useState<VisitStats>(() => adminService.getVisitStats());
+  const [isRefreshingStats, setIsRefreshingStats] = useState(false);
+  const [adsWatched, setAdsWatched] = useState<number>(() => Math.max(creditService.getTotalAdsWatched(), adminService.getVisitStats().adsWatched));
   
   // Filter & Search states
   const [profileSearch, setProfileSearch] = useState('');
@@ -87,20 +89,30 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     // Auto-sync admin's custom profile images to cloud so all visitors receive them
     adminService.syncToCloud().catch(() => {});
 
+    // Fetch real-time global analytics (visits, signups, installs, ads) from Vercel Blob
+    adminService.fetchCloudAnalytics().catch(() => {});
+    const analyticsInterval = setInterval(() => {
+      adminService.fetchCloudAnalytics().catch(() => {});
+    }, 15000);
+
     const unsubProfiles = adminService.subscribeProfiles((updatedProfiles) => {
       setProfiles(updatedProfiles);
     });
     const unsubStats = adminService.subscribeStats(() => {
       setSignups(adminService.getSignups());
       setInstalls(adminService.getInstalls());
+      const vs = adminService.getVisitStats();
+      setVisitStats(vs);
+      setAdsWatched(Math.max(creditService.getTotalAdsWatched(), vs.adsWatched));
     });
 
     const handleAdWatched = () => {
-      setAdsWatched(creditService.getTotalAdsWatched());
+      setAdsWatched(Math.max(creditService.getTotalAdsWatched(), adminService.getVisitStats().adsWatched));
     };
     window.addEventListener('bondhu-ad-watched', handleAdWatched);
 
     return () => {
+      clearInterval(analyticsInterval);
       unsubProfiles();
       unsubStats();
       window.removeEventListener('bondhu-ad-watched', handleAdWatched);
@@ -595,6 +607,51 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                     ১৫ সেকেন্ড
                   </span>
                   <span className="truncate">ক্রেডিট রিচার্জ কাউন্টার</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Website Traffic & Visitors Counter */}
+            <div className="bg-slate-800/70 border border-cyan-700/40 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-lg w-full">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-sm shrink-0">
+                    <i className="fas fa-globe"></i>
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-white">ওয়েবসাইট ভিজিটর ও ট্রাফিক (Live Cloud Stats)</h4>
+                    <p className="text-[10px] sm:text-[11px] text-slate-400">সকল ইউজারের মোবাইল/ব্রাউজার থেকে রিয়েল-টাইম হিসাব</p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    setIsRefreshingStats(true);
+                    const ok = await adminService.fetchCloudAnalytics();
+                    setIsRefreshingStats(false);
+                    showToast(ok ? '✓ রিয়েল-টাইম ভিজিট, সাইন আপ ও ডাউনলোড আপডেট হয়েছে!' : 'ক্লাউড রিফ্রেশ করা যায়নি');
+                  }}
+                  disabled={isRefreshingStats}
+                  className="bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-500/40 text-cyan-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition-all active:scale-95"
+                >
+                  <i className={`fas ${isRefreshingStats ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+                  <span>রিফ্রেশ</span>
+                </button>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
+                <div className="bg-slate-900/70 border border-slate-700/70 rounded-xl sm:rounded-2xl p-3 text-center">
+                  <p className="text-[10px] sm:text-xs font-semibold text-cyan-300">মোট ওয়েবসাইট ভিজিট</p>
+                  <h4 className="text-xl sm:text-2xl font-black text-white mt-1">{visitStats.totalVisits}</h4>
+                  <p className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5">সর্বমোট</p>
+                </div>
+                <div className="bg-slate-900/70 border border-slate-700/70 rounded-xl sm:rounded-2xl p-3 text-center">
+                  <p className="text-[10px] sm:text-xs font-semibold text-teal-300">আজকের ভিজিট</p>
+                  <h4 className="text-xl sm:text-2xl font-black text-white mt-1">{visitStats.todayVisits}</h4>
+                  <p className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5">আজ (বাংলাদেশ সময়)</p>
+                </div>
+                <div className="bg-slate-900/70 border border-slate-700/70 rounded-xl sm:rounded-2xl p-3 text-center">
+                  <p className="text-[10px] sm:text-xs font-semibold text-indigo-300">ইউনিক ভিজিটর</p>
+                  <h4 className="text-xl sm:text-2xl font-black text-white mt-1">{visitStats.uniqueVisitors}</h4>
+                  <p className="text-[9px] sm:text-[10px] text-slate-400 mt-0.5">আলাদা ইউজার/ডিভাইস</p>
                 </div>
               </div>
             </div>

@@ -270,6 +270,14 @@ const App: React.FC = () => {
     // Fetch latest cloud profiles on app mount for every visitor
     adminService.fetchCloudProfiles().catch(() => {});
 
+    // Track real website visit in cloud analytics (once per session)
+    adminService.trackVisit();
+
+    const handleGlobalAdWatched = () => {
+      adminService.recordAdWatch();
+    };
+    window.addEventListener('bondhu-ad-watched', handleGlobalAdWatched);
+
     const handleWindowProfilesUpdated = (e: any) => {
       if (e.detail && Array.isArray(e.detail)) {
         setAllProfiles([...e.detail]);
@@ -415,6 +423,7 @@ const App: React.FC = () => {
         clearInterval(cloudSyncInterval);
         window.removeEventListener('bondhu-profiles-updated', handleWindowProfilesUpdated);
         window.removeEventListener('bondhu-app-control-updated', handleAppControlUpdated);
+        window.removeEventListener('bondhu-ad-watched', handleGlobalAdWatched);
         window.removeEventListener('appinstalled', handleAppInstalled);
         window.removeEventListener('bondhu-app-installed', handleCustomInstalled);
         window.removeEventListener('pwa-can-install', handleCanInstall);
